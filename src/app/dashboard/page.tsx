@@ -414,7 +414,7 @@ export default function DashboardPage() {
                 </button>
               )}
               <Link
-                href="https://github.com/pubky/pubky-core/"
+                href="https://github.com/pubky/pubky-homeserver/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 transition-colors hover:text-foreground"

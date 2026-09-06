@@ -177,5 +177,5 @@ This project is maintained by the Pubky team at Synonym. Contributions are welco
 
 ## Related Projects
 
-- [pubky-core](https://github.com/pubky/pubky-core) - The homeserver this dashboard manages
+- [pubky-homeserver](https://github.com/pubky/pubky-homeserver) - The homeserver this dashboard manages
 - [franky](https://github.com/pubky/franky) - Reference UI implementation (design system source)
