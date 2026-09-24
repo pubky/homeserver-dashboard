@@ -72,7 +72,7 @@ describe('WebDavService error envelope', () => {
   });
 
   it('translates a 404 PROPFIND into an empty directory listing', async () => {
-    // pubky-core lazily creates a user's namespace on first write, so a
+    // Pubky Homeserver lazily creates a user's namespace on first write, so a
     // PROPFIND against a not-yet-created /<pubkey>/pub/ comes back 404. That
     // is "no data yet", not a fault, and the FileBrowser should render the
     // standard empty state, not the red error Alert.

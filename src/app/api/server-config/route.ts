@@ -14,9 +14,9 @@ const getConfigPath = () => process.env.HOMESERVER_CONFIG_PATH || '/app/homeserv
 const ROUTE_NAME = '/api/server-config';
 const REDACTION_TOKEN = '********';
 
-// Top-level TOML tables that must be present for pubky-core to boot.
+// Top-level TOML tables that must be present for Pubky Homeserver to boot.
 // Validated structurally on POST so the dashboard refuses to write a config
-// that the homeserver can't load. We don't validate values - pubky-core does
+// that the homeserver can't load. We don't validate values - Pubky Homeserver does
 // that on startup.
 const REQUIRED_SECTIONS = ['general', 'drive', 'admin', 'storage'];
 

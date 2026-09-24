@@ -211,7 +211,7 @@ Baseline work toward v1.0.0: CI repair, test coverage, security fixes, dead-code
 - `GET /api/health` - dedicated liveness endpoint used by the Dockerfile HEALTHCHECK and any orchestrator probes. Always returns `200 { ok: true }`; does not consult downstream services.
 - Vitest coverage for `cloudflare-config`, `server-config` (incl. POST + redaction roundtrip), `public-health`, `admin/generate_signup_token`, `logs`, and `health` route handlers (test count: 12 → 75; file coverage: 5 → 11).
 - `smol-toml` promoted from transitive to explicit dependency (used by `/api/server-config` POST for TOML structural validation).
-- `LICENSE` (MIT, matching pubky-core).
+- `LICENSE` (MIT, matching Pubky Homeserver).
 - `CHANGELOG.md` following Keep a Changelog.
 - `CONTRIBUTORS.md` crediting the original contractor.
 - `docs/AUDIT-2026-05-19.md` - forensic audit of the inherited state with the v1.0.0 punch list.
