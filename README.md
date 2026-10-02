@@ -63,43 +63,74 @@ npm run build
 npm start
 ```
 
-## Docker Deployment
+## Deployment
 
-The dashboard can be deployed using Docker, either standalone or as part of an Umbrel app.
+There is one build output, the **bundle**. `npm run bundle` runs `next build` and then finishes `.next/standalone`, so that `node server.js` inside that directory is the whole application ([`scripts/bundle.mjs`](scripts/bundle.mjs) has the details). Every deployment is a thin wrapper around the bundle:
 
-### Standalone Docker
+|                         | Umbrel                        | Docker (without Umbrel)               | systemd                                                                      |
+| ----------------------- | ----------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| Wrapper                 | the Docker image              | the Docker image                      | [`deploy/homeserver-dashboard.service`](deploy/homeserver-dashboard.service) |
+| Settings come from      | the Umbrel app's compose file | `docker run -e ...`                   | the unit and its env file                                                    |
+| Who authenticates       | Umbrel's app proxy            | nobody                                | nobody                                                                       |
+| UI variant (`PLATFORM`) | `umbrel`                      | standalone                            | standalone                                                                   |
+| `config.toml` editor    | on                            | on when the data directory is mounted | off unless the unit is changed                                               |
 
-Build the Docker image:
+**The dashboard has no login of its own.** Whoever can reach its port is an admin and can reveal the admin password. Umbrel's app proxy authenticates; in the other two deployments nothing does, so keep the port on loopback and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then open `http://localhost:8080`) or a reverse proxy that authenticates. Do not publish the port directly.
+
+Loopback narrows who can reach the port; it is not a login. Any user or process on the host can still reach it, and the dashboard does not check the `Host` header, so while a tunnel is open a web page in the same browser could reach it through DNS rebinding. Close the tunnel when you are not using it.
+
+### Umbrel
+
+The dashboard is included in the `pubky-homeserver` Umbrel app:
+
+- It runs as the `web` service in the app's `docker-compose.yml`
+- Environment variables (`ADMIN_BASE_URL`, `ADMIN_TOKEN`, `PLATFORM=umbrel`) are configured by the app
+- It connects to the homeserver service via Docker networking (`http://homeserver:6288`)
+- Access is provided through Umbrel's app proxy (no direct port exposure needed)
+
+### Docker (without Umbrel)
+
+Build the image and run it, published on loopback only:
 
 ```bash
 docker build -t homeserver-dashboard .
-```
-
-Run the container:
-
-```bash
 docker run -d \
-  -p 8080:8080 \
-  -e PORT=8080 \
+  -p 127.0.0.1:8080:8080 \
   -e ADMIN_BASE_URL=http://homeserver:6288 \
   -e ADMIN_TOKEN=your-admin-password \
   homeserver-dashboard
 ```
 
-### Umbrel Deployment
+### systemd
 
-The dashboard is included in the `pubky-homeserver` Umbrel app. When deployed via Umbrel:
+For a homeserver that runs as a plain systemd service, the dashboard can run next to it the same way. It needs Node.js 24+ on the host and nothing else.
 
-- The dashboard runs as the `web` service in `docker-compose.yml`
-- Environment variables (`ADMIN_BASE_URL`, `ADMIN_TOKEN`) are automatically configured
-- The dashboard connects to the homeserver service via Docker networking (`http://homeserver:6288`)
-- Access is provided through Umbrel's app proxy (no direct port exposure needed)
+Build the bundle and install it (the bundle can also be built on another machine with the same OS and CPU architecture and copied over):
 
-The Dockerfile uses Next.js standalone output for optimal image size and includes:
+```bash
+npm ci
+npm run bundle
+# Copy first and swap after
+sudo rm -rf /opt/homeserver-dashboard.new
+sudo cp -r .next/standalone /opt/homeserver-dashboard.new
+sudo rm -rf /opt/homeserver-dashboard && sudo mv /opt/homeserver-dashboard.new /opt/homeserver-dashboard
+```
 
-- Multi-stage build for smaller production image
-- Non-root user for security
-- Proper handling of server-only environment variables
+Put the admin password in an env file and install the example unit:
+
+```bash
+sudo install -m 600 /dev/null /etc/homeserver-dashboard.env
+sudoedit /etc/homeserver-dashboard.env           # ADMIN_TOKEN=<admin_password from the homeserver config.toml>
+sudo cp deploy/homeserver-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now homeserver-dashboard
+```
+
+To upgrade, repeat the first block and run `sudo systemctl restart homeserver-dashboard`.
+
+The unit is an example: read it before installing. It states what it assumes about the host, and explains each setting, including how to turn on the `config.toml` editor and the Logs tab.
+
+Nothing in the bundle is specific to systemd: any process manager can run `node server.js` with the same environment. Whichever you use, set `HOSTNAME=127.0.0.1`, or the server listens on every interface.
 
 ## Configuration
 
@@ -121,15 +152,15 @@ All variables are server-only (no `NEXT_PUBLIC_*` prefix) and read lazily at req
 | `PREVIEW_INSTANT_ORIGIN`  | Origin the instant preview tunnel forwards to                | No       | `http://homeserver:6286`               | Preview's instant tunnel forwards to the wrong origin                              |
 | `CF_API_BASE`             | Cloudflare API base URL                                      | No       | `https://api.cloudflare.com/client/v4` | Tests/e2e override only; leave unset in production                                 |
 | `ADMIN_PASSWORD_MANAGED`  | Set `true` on managed platforms (Umbrel)                     | No       | unset                                  | When unset, `admin_password` stays editable; Umbrel sets it to protect the pairing |
-| `PLATFORM`                | `umbrel` on the Umbrel app; unset/anything else = standalone | No       | unset (standalone)                     | See "Standalone vs Umbrel" below                                                   |
-| `PORT` / `HOSTNAME`       | Next.js standalone server binding                            | No       | `8080` / `0.0.0.0` (Dockerfile)        | Server binds elsewhere                                                             |
+| `PLATFORM`                | `umbrel` on the Umbrel app; unset/anything else = standalone | No       | unset (standalone)                     | See "`PLATFORM`: the UI variant" below                                             |
+| `PORT` / `HOSTNAME`       | Address and port `server.js` binds                           | No       | `8080` / `0.0.0.0` (Dockerfile)        | Server binds elsewhere                                                             |
 
-### Standalone vs Umbrel
+### `PLATFORM`: the UI variant
 
-The same image serves both deployments; `PLATFORM` selects the experience:
+`PLATFORM` selects the UI variant. It is separate from how the dashboard is deployed: the same bundle serves both variants, and only the Umbrel app sets it.
 
 - **`PLATFORM=umbrel`** (set by the Umbrel app): shows the Cloudflare setup tab and flows, umbrelOS backup guidance, and "restart the app from Umbrel" copy.
-- **unset / standalone**: the Cloudflare _setup_ UI and its `/cloudflare-guide` are hidden, and the Cloudflare setup API routes return `404 not_supported` — the dashboard doesn't run the cloudflared containers a standalone deployment lacks, so the tunnel can't be established here. The read-only status views (public address, reachability, the pkarr "Pubky network" check) stay, so if you front the homeserver with your own reverse proxy or tunnel you can still see whether it's reachable and correctly published. Restart copy and the backup note are generic.
+- **unset / standalone**: the Cloudflare _setup_ UI and its `/cloudflare-guide` are hidden, and the Cloudflare setup API routes return `404 not_supported` — the dashboard doesn't run the cloudflared containers that only the Umbrel app has, so the tunnel can't be established here. The read-only status views (public address, reachability, the pkarr "Pubky network" check) stay, so if you front the homeserver with your own reverse proxy or tunnel you can still see whether it's reachable and correctly published. Restart copy and the backup note are generic.
 
 \* Required to use the real homeserver APIs
 
@@ -154,6 +185,7 @@ The same image serves both deployments; `PLATFORM` selects the experience:
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
+- `npm run bundle` - Build the bundle every deployment runs (see "Deployment")
 - `npm start` - Start production server
 - `npm run lint` - Run ESLint (`eslint .`)
 - `npm run lint:fix` - Fix lint issues (`eslint . --fix`)

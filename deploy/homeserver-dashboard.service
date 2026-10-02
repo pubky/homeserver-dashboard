@@ -1,0 +1,62 @@
+# Example unit: the systemd wrapper around the bundle, for a homeserver that
+# itself runs as a plain systemd service on the same host. The README
+# ("Deployment") has the install commands; the reason for each setting is here.
+#
+# Assumes the homeserver's user is `pubky`, its data directory is
+# /home/pubky/.pubky, its ports are the default ones and Node.js 24+ is at
+# /usr/bin/node. Edit to match your host.
+
+[Unit]
+Description=Pubky homeserver dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The homeserver's user, so the dashboard can read its config.toml.
+User=pubky
+Group=pubky
+# The bundle: a copy of .next/standalone after `npm run bundle`.
+WorkingDirectory=/opt/homeserver-dashboard
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+
+# The dashboard has no login of its own: whoever can reach this port is an
+# admin and can reveal the admin password. Keep it on loopback and reach it
+# through an SSH tunnel or a reverse proxy that authenticates. Without
+# HOSTNAME it listens on every interface.
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=8080
+
+# Where the homeserver is. ADMIN_TOKEN is its [admin] admin_password and comes
+# from the env file (mode 600) so it stays out of this world-readable unit.
+EnvironmentFile=/etc/homeserver-dashboard.env
+Environment=ADMIN_BASE_URL=http://127.0.0.1:6288
+Environment=HOMESERVER_CONFIG_PATH=/home/pubky/.pubky/config.toml
+# Only the API explorer tab uses these two, and it exists only in a bundle
+# built with NEXT_PUBLIC_API_EXPLORER=true. Their built-in defaults are Docker
+# service names (http://homeserver:...), which do not resolve on a plain host.
+Environment=CLIENT_BASE_URL=http://127.0.0.1:6286
+Environment=METRICS_BASE_URL=http://127.0.0.1:6289
+# The Logs tab reads a file and stays hidden without one. A homeserver that
+# only logs to journald has none; if yours also writes a log file, point at it.
+#Environment=HOMESERVER_LOG_PATH=/home/pubky/.pubky/homeserver.log
+
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Keeps /home read-only, so Settings shows config.toml but cannot save it.
+# To allow editing, add `ReadWritePaths=` with the homeserver's data directory.
+# The admin password then lives in two places: after changing admin_password
+# in the editor, update the env file and restart this unit as well, or the
+# dashboard keeps sending the old one.
+ProtectHome=read-only
+# Read-only still means readable, and this process runs as the homeserver's
+# user. Hide the homeserver's key, which the dashboard never needs. The `-`
+# ignores a missing file.
+InaccessiblePaths=-/home/pubky/.pubky/secret
+
+[Install]
+WantedBy=multi-user.target

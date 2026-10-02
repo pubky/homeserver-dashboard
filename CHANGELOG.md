@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The dashboard can run under systemd, without Docker. `npm run bundle` produces the bundle: `.next/standalone` made self-contained, so `node server.js` inside it is the whole application. `deploy/homeserver-dashboard.service` is an example unit that wraps it, bound to loopback, with the homeserver's config read-only and its key hidden.
+
+### Changed
+
+- The Docker image is built from the same bundle instead of separate `COPY` lines in the Dockerfile, so the image and a systemd install cannot drift apart. The image holds the same files as before.
+- The bundle no longer depends on its surroundings: `next.config.mjs` pins `outputFileTracingRoot`, so a lockfile in a parent directory cannot change its layout, and a `.env` / `.env.production` in the checkout is not copied into it.
+- The README has one "Deployment" section that compares Umbrel, plain Docker and systemd. Its plain Docker example now publishes the port on loopback only, because the dashboard has no login of its own.
+
 ## [0.1.27]
 
 ### Added
