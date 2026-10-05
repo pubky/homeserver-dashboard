@@ -28,9 +28,10 @@ Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=8080
 
-# Where the homeserver is. ADMIN_TOKEN is its [admin] admin_password and comes
-# from the env file (mode 600) so it stays out of this world-readable unit.
-EnvironmentFile=/etc/homeserver-dashboard.env
+# Where the homeserver is. The admin password is deliberately not set here:
+# without ADMIN_TOKEN the dashboard reads [admin] admin_password from the
+# config.toml below, the file the homeserver itself takes it from, so the
+# password lives in one place and stays out of this world-readable unit.
 Environment=ADMIN_BASE_URL=http://127.0.0.1:6288
 Environment=HOMESERVER_CONFIG_PATH=/home/pubky/.pubky/config.toml
 # Only the API explorer tab uses these two, and it exists only in a bundle
@@ -44,14 +45,14 @@ Environment=METRICS_BASE_URL=http://127.0.0.1:6289
 
 Restart=on-failure
 RestartSec=5
+# server.js exits with 143 when it gets SIGTERM. Without this, every stop or
+# restart is recorded as a failure and `systemctl stop` leaves the unit failed.
+SuccessExitStatus=143
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 # Keeps /home read-only, so Settings shows config.toml but cannot save it.
 # To allow editing, add `ReadWritePaths=` with the homeserver's data directory.
-# The admin password then lives in two places: after changing admin_password
-# in the editor, update the env file and restart this unit as well, or the
-# dashboard keeps sending the old one.
 ProtectHome=read-only
 # Read-only still means readable, and this process runs as the homeserver's
 # user. Hide the homeserver's key, which the dashboard never needs. The `-`
