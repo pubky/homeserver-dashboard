@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getAdminToken } from '@/lib/server/admin-token';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError } from '@/lib/server/logger';
 import { proxyToUpstream } from '@/lib/server/upstream-proxy';
@@ -31,7 +32,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
   const baseUrl = process.env.ADMIN_BASE_URL;
-  const token = process.env.ADMIN_TOKEN;
+  const token = await getAdminToken();
 
   if (!baseUrl || !token) {
     const requestId = getRequestId(request);

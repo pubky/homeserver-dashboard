@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The dashboard can run under systemd, without Docker. `npm run bundle` produces the bundle: `.next/standalone` made self-contained, so `node server.js` inside it is the whole application. `deploy/homeserver-dashboard.service` is an example unit that wraps it, bound to loopback, with the homeserver's config read-only and its key hidden.
+- `ADMIN_TOKEN` is now optional. When it is unset, the dashboard reads `[admin] admin_password` from the homeserver's `config.toml` (`HOMESERVER_CONFIG_PATH`) on each request, so an install that can see that file keeps the password in one place and picks up a change without a restart. A set `ADMIN_TOKEN` still wins, so Docker and Umbrel deployments behave as before.
 
 ### Changed
 

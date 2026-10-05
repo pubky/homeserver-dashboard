@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminToken } from '@/lib/server/admin-token';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const baseUrl = process.env.ADMIN_BASE_URL;
-  const token = process.env.ADMIN_TOKEN;
+  const token = await getAdminToken();
 
   if (!baseUrl || !token) {
     const error = new RouteError(500, 'config_error', 'Homeserver admin API is not configured');

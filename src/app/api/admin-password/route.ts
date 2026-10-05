@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminToken } from '@/lib/server/admin-token';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
@@ -7,7 +8,7 @@ const ROUTE_NAME = '/api/admin-password';
 /**
  * GET /api/admin-password
  * Returns the admin password this dashboard uses to authenticate to the
- * homeserver (the ADMIN_TOKEN env var). Exposed so operators can connect
+ * homeserver (see getAdminToken). Exposed so operators can connect
  * other tools (e.g. pubky-cli) without digging it out of config.toml -
  * which, on managed deployments, they must not edit anyway.
  *
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
 
-  const password = process.env.ADMIN_TOKEN;
+  const password = await getAdminToken();
   if (!password) {
     const error = new RouteError(404, 'not_found', 'Admin password is not configured in this environment');
     logRouteError({
