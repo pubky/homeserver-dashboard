@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev --webpack -p 8080",
     "build": "next build --webpack",
+    "bundle": "npm run build && node scripts/bundle.mjs",
     "start": "next start -p 8080",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

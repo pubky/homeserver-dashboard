@@ -24,12 +24,13 @@ coverage
 tsconfig.tsbuildinfo
 
 # Tests and dev tooling - `next build` never compiles these, and the
-# runtime image only copies the standalone output plus entrypoint.sh
+# runtime image only copies the bundle plus entrypoint.sh
 **/*.test.*
 vitest.config.ts
 scripts
-# ...except the boot-time migration the runtime image needs (Dockerfile COPYs it).
+# ...except the two scripts the Dockerfile uses.
 !scripts/migrate-cf-token.mjs
+!scripts/bundle.mjs
 docs
 
 # IDE

@@ -10,10 +10,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the Next.js app
+# Build the bundle into .next/standalone (see scripts/bundle.mjs).
 # Server-only environment variables (ADMIN_BASE_URL, ADMIN_TOKEN) are set at runtime via docker-compose
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN npm run bundle
 
 # Production stage
 FROM node:24-alpine AS runner
@@ -37,19 +37,9 @@ RUN addgroup --system --gid 1001 nodejs && \
     addgroup -g 101 homeserver && \
     adduser nextjs homeserver
 
-# Copy built application from standalone output
-COPY --from=builder /app/public ./public
+# The application: the bundle from the build stage. The rest of this stage is
+# the Docker wrapper around it.
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Belt-and-suspenders for the PKARR verification route: @synonymdev/pkarr is a
-# CJS+WASM package loaded natively (serverExternalPackages). Next's file
-# tracing currently carries pkarr_js_bg.wasm into .next/standalone, but a
-# future Next/nft change could silently drop it - and that would only surface
-# at runtime in the container (next dev and the unit tests load it from the
-# top-level node_modules, so CI would stay green). Copy it explicitly so the
-# runtime never depends on tracing for it.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@synonymdev/pkarr ./node_modules/@synonymdev/pkarr
 
 # Embed cloudflared for the Connect (browser-auth) and Test-drive (quick
 # tunnel) setup flows. Pinned by digest, copied from the official image -
