@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- A file uploaded by any homeserver user could run as a page on the dashboard's own origin. The file and client proxies relay files with the homeserver's content type, so an uploaded `x.html` opened through `/api/webdav/...` or `/api/client-proxy/...` was served as live HTML, and its script could call the admin API as whoever was looking at the dashboard. Every relayed response, and every other response under `/api`, is now sent as inert content: a sandboxing `Content-Security-Policy` (`default-src 'none'; frame-ancestors 'none'; sandbox`), `X-Content-Type-Options: nosniff`, and for relayed files `Content-Disposition: attachment`. The dashboard page reads these responses with `fetch` and is unaffected.
+
 ## [0.1.27]
 
 ### Added

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
+import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
 const UPSTREAM_TIMEOUT_MS = 60000;
@@ -102,6 +103,7 @@ export async function proxyToUpstream(
     });
 
     const headers: Record<string, string> = {
+      ...INERT_CONTENT_HEADERS,
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       Pragma: 'no-cache',
       Expires: '0',
