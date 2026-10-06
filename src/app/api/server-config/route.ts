@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import { createHash, randomUUID } from 'crypto';
 import { parse as parseToml } from 'smol-toml';
@@ -114,7 +115,7 @@ function validateTomlStructure(toml: string): RouteError | null {
  * mtime (for the "differs from running" indicator), and whether the file is
  * writable (drives whether the UI shows the edit affordance).
  */
-export async function GET() {
+async function handleGet() {
   const requestId = randomUUID();
   const startedAt = Date.now();
   const configPath = getConfigPath();
@@ -227,7 +228,7 @@ export async function GET() {
  * Write is atomic: temp file in the same directory then rename. A crash
  * mid-write leaves the original file intact.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const configPath = getConfigPath();
@@ -414,3 +415,6 @@ export async function POST(request: NextRequest) {
     requestId,
   });
 }
+
+export const GET = withAdminAuth(handleGet);
+export const POST = withAdminAuth(handlePost);

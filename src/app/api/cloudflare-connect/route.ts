@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { isAllowedPublicHostname } from '@/lib/server/hostname';
@@ -113,7 +114,7 @@ async function currentStatus(): Promise<{
   return { status: 'idle' };
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const status = await currentStatus();
   return NextResponse.json(
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -471,3 +472,6 @@ function lastLine(output: string): string {
   const lines = output.trim().split('\n').filter(Boolean);
   return lines[lines.length - 1] ?? 'unknown error';
 }
+
+export const GET = withAdminAuth(handleGet);
+export const POST = withAdminAuth(handlePost);

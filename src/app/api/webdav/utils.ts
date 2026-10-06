@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminToken } from '@/lib/server/admin-token';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
+import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
 const UPSTREAM_TIMEOUT_MS = 60000;
@@ -152,7 +153,7 @@ export async function proxyWebDavRequest(
     if (NULL_BODY_STATUSES.has(response.status)) {
       return new NextResponse(null, {
         status: response.status,
-        headers: { 'X-Request-Id': requestId },
+        headers: { ...INERT_CONTENT_HEADERS, 'X-Request-Id': requestId },
       });
     }
 
@@ -161,6 +162,7 @@ export async function proxyWebDavRequest(
     return new NextResponse(response.body, {
       status: response.status,
       headers: {
+        ...INERT_CONTENT_HEADERS,
         'Content-Type': responseContentType,
         'X-Request-Id': requestId,
       },

@@ -1,6 +1,7 @@
 'use client';
 
-import { Settings } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
+import { useAdminSession } from '@/components/organisms/AuthGate';
 import { Button } from '@/components/ui/button';
 
 interface DashboardNavbarProps {
@@ -9,6 +10,8 @@ interface DashboardNavbarProps {
 }
 
 export function DashboardNavbar({ onSettingsClick, showSettingsButton = true }: DashboardNavbarProps) {
+  // Null when the dashboard runs without sign-in; then there is nothing to sign out of.
+  const session = useAdminSession();
   return (
     <header className="w-full bg-background pt-4 pb-2 sm:pt-5 sm:pb-3">
       <nav className="flex w-full min-w-0 items-center justify-between gap-4 sm:gap-6">
@@ -37,6 +40,18 @@ export function DashboardNavbar({ onSettingsClick, showSettingsButton = true }: 
               onClick={onSettingsClick}
             >
               <Settings className="size-6" />
+            </Button>
+          )}
+          {session && (
+            <Button
+              variant="outline"
+              className="h-10 shrink-0 gap-2 rounded-full border border-[#303034] bg-[#FFFFFF0B] px-4 text-foreground backdrop-blur-xl hover:bg-white/8"
+              title={`Signed in as pubky${session.pubky}`}
+              onClick={() => void session.signOut()}
+              data-testid="sign-out"
+            >
+              <LogOut className="size-4" />
+              Sign out
             </Button>
           )}
         </div>

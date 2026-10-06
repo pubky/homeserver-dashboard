@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { RouteError, errorResponse } from '@/lib/server/errors';
@@ -44,7 +45,7 @@ const HOMESERVER_CONFIG = () => process.env.HOMESERVER_CONFIG_PATH || '/app/home
  * because reusing the same hostname later requires removing the old DNS
  * record in the Cloudflare dashboard first.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -154,3 +155,5 @@ export async function POST(request: NextRequest) {
     );
   } // end runDisconnect
 }
+
+export const POST = withAdminAuth(handlePost);

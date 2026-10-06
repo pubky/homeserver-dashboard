@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { constants as fsConstants, promises as fs } from 'fs';
 import path from 'path';
 import { RouteError, errorResponse } from '@/lib/server/errors';
@@ -49,7 +50,7 @@ async function isCloudflareConfigSupported(): Promise<boolean> {
  * any other failure is an honest 500 so the client can retry instead of
  * hiding the tab.
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const supported = await isCloudflareConfigSupported();
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
  * Body: { token?: string, domain?: string }
  * Writes to mounted volume so homeserver and cloudflared pick up after restart.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -294,3 +295,6 @@ export async function POST(request: NextRequest) {
     return errorResponse(error, requestId);
   }
 }
+
+export const GET = withAdminAuth(handleGet);
+export const POST = withAdminAuth(handlePost);

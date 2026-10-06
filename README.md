@@ -67,17 +67,20 @@ npm start
 
 There is one build output, the **bundle**. `npm run bundle` runs `next build` and then finishes `.next/standalone`, so that `node server.js` inside that directory is the whole application ([`scripts/bundle.mjs`](scripts/bundle.mjs) has the details). Every deployment is a thin wrapper around the bundle:
 
-|                         | Umbrel                        | Docker (without Umbrel)               | systemd                                                                      |
-| ----------------------- | ----------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
-| Wrapper                 | the Docker image              | the Docker image                      | [`deploy/homeserver-dashboard.service`](deploy/homeserver-dashboard.service) |
-| Settings come from      | the Umbrel app's compose file | `docker run -e ...`                   | the unit and the homeserver's `config.toml`                                  |
-| Who authenticates       | Umbrel's app proxy            | nobody                                | nobody                                                                       |
-| UI variant (`PLATFORM`) | `umbrel`                      | standalone                            | standalone                                                                   |
-| `config.toml` editor    | on                            | on when the data directory is mounted | off unless the unit is changed                                               |
+|                         | Umbrel                        | Docker (without Umbrel)                    | systemd                                                                      |
+| ----------------------- | ----------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------- |
+| Wrapper                 | the Docker image              | the Docker image                           | [`deploy/homeserver-dashboard.service`](deploy/homeserver-dashboard.service) |
+| Settings come from      | the Umbrel app's compose file | `docker run -e ...`                        | the unit and the homeserver's `config.toml`                                  |
+| Who authenticates       | Umbrel's app proxy            | admin sign-in, once `ADMIN_PUBKEYS` is set | admin sign-in (`ADMIN_PUBKEYS` in the unit)                                  |
+| UI variant (`PLATFORM`) | `umbrel`                      | standalone                                 | standalone                                                                   |
+| `config.toml` editor    | on                            | on when the data directory is mounted      | off unless the unit is changed                                               |
 
-**The dashboard has no login of its own.** Whoever can reach its port is an admin and can reveal the admin password. Umbrel's app proxy authenticates; in the other two deployments nothing does, so keep the port on loopback and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then open `http://localhost:8080`) or a reverse proxy that authenticates. Do not publish the port directly.
+**Access control.** The dashboard is an admin tool: whoever gets in can manage users and files and reveal the admin password. It is kept to admins in one of two ways:
 
-Loopback narrows who can reach the port; it is not a login. Any user or process on the host can still reach it, and the dashboard does not check the `Host` header, so while a tunnel is open a web page in the same browser could reach it through DNS rebinding. Close the tunnel when you are not using it.
+- **Something in front of it authenticates.** Umbrel's app proxy does, so the Umbrel app needs nothing more.
+- **Admin sign-in with Pubky Ring.** Set `ADMIN_PUBKEYS`, and every API route refuses requests that do not come from a signed-in admin. See [Admin sign-in](#admin-sign-in).
+
+With neither, the dashboard has no login at all, and whoever can reach its port is an admin. Then keep the port on loopback and reach it through an SSH tunnel (`ssh -L 8080:127.0.0.1:8080 <host>`, then open `http://localhost:8080`). Do not publish the port. Loopback narrows who can reach the port; it is not a login. Any user or process on the host can still reach it, and without sign-in a web page in the same browser could reach it through DNS rebinding while a tunnel is open.
 
 ### Umbrel
 
@@ -98,6 +101,7 @@ docker run -d \
   -p 127.0.0.1:8080:8080 \
   -e ADMIN_BASE_URL=http://homeserver:6288 \
   -e ADMIN_TOKEN=your-admin-password \
+  -e ADMIN_PUBKEYS=your-pubky \
   homeserver-dashboard
 ```
 
@@ -116,13 +120,16 @@ sudo cp -r .next/standalone /opt/homeserver-dashboard.new
 sudo rm -rf /opt/homeserver-dashboard && sudo mv /opt/homeserver-dashboard.new /opt/homeserver-dashboard
 ```
 
-Install the example unit:
+Install the example unit, and put your pubky (Pubky Ring shows it) in its `ADMIN_PUBKEYS` line:
 
 ```bash
 sudo cp deploy/homeserver-dashboard.service /etc/systemd/system/
+sudoedit /etc/systemd/system/homeserver-dashboard.service     # Environment=ADMIN_PUBKEYS=<your pubky>
 sudo systemctl daemon-reload
 sudo systemctl enable --now homeserver-dashboard
 ```
+
+The unit ships with that line empty, which keeps the dashboard closed to everyone until a pubky is filled in.
 
 There is no admin password to set. The unit leaves `ADMIN_TOKEN` unset, and the dashboard then reads `[admin] admin_password` from the homeserver's `config.toml`, the file the homeserver itself takes it from. The password stays in that one place.
 
@@ -151,6 +158,8 @@ All variables are server-only (no `NEXT_PUBLIC_*` prefix) and read lazily at req
 | `CLOUDFLARED_RUNTIME_DIR` | Config dir path as seen by the runtime cloudflared container                  | No       | `/etc/cloudflared-config`              | Generated `config.yml` points at the wrong `credentials-file` path                                                             |
 | `PREVIEW_INSTANT_ORIGIN`  | Origin the instant preview tunnel forwards to                                 | No       | `http://homeserver:6286`               | Preview's instant tunnel forwards to the wrong origin                                                                          |
 | `CF_API_BASE`             | Cloudflare API base URL                                                       | No       | `https://api.cloudflare.com/client/v4` | Tests/e2e override only; leave unset in production                                                                             |
+| `ADMIN_PUBKEYS`           | Pubkys that may sign in with Pubky Ring. Setting it turns admin sign-in on    | No       | unset (no sign-in)                     | See "Admin sign-in" below                                                                                                      |
+| `AUTH_RELAY`              | HTTP relay the Ring sign-in goes through                                      | No       | the Pubky SDK's default relay          | Sign-in uses the default relay                                                                                                 |
 | `ADMIN_PASSWORD_MANAGED`  | Set `true` on managed platforms (Umbrel)                                      | No       | unset                                  | When unset, `admin_password` stays editable; Umbrel sets it to protect the pairing                                             |
 | `PLATFORM`                | `umbrel` on the Umbrel app; unset/anything else = standalone                  | No       | unset (standalone)                     | See "`PLATFORM`: the UI variant" below                                                                                         |
 | `PORT` / `HOSTNAME`       | Address and port `server.js` binds                                            | No       | `8080` / `0.0.0.0` (Dockerfile)        | Server binds elsewhere                                                                                                         |
@@ -161,6 +170,18 @@ All variables are server-only (no `NEXT_PUBLIC_*` prefix) and read lazily at req
 
 - **`PLATFORM=umbrel`** (set by the Umbrel app): shows the Cloudflare setup tab and flows, umbrelOS backup guidance, and "restart the app from Umbrel" copy.
 - **unset / standalone**: the Cloudflare _setup_ UI and its `/cloudflare-guide` are hidden, and the Cloudflare setup API routes return `404 not_supported` — the dashboard doesn't run the cloudflared containers that only the Umbrel app has, so the tunnel can't be established here. The read-only status views (public address, reachability, the pkarr "Pubky network" check) stay, so if you front the homeserver with your own reverse proxy or tunnel you can still see whether it's reachable and correctly published. Restart copy and the backup note are generic.
+
+### Admin sign-in
+
+`ADMIN_PUBKEYS` turns on a sign-in with [Pubky Ring](https://pubkyring.app/). It is a list of pubkys, comma or space separated, with or without the `pubky` prefix. Only those keys can sign in.
+
+- **What changes.** Every API route except the liveness probe (`/api/health`) and the sign-in routes themselves answers `401` without an admin session. The page shows a QR code; approving it in Ring signs you in. A session lasts at most 8 hours and ends after 30 minutes without activity. Sessions are kept in memory, so restarting the dashboard signs everyone out.
+- **The API answers the dashboard page only.** With sign-in on, a request must also carry a header that only the page's own script can add. Opening an API address in the browser, following a link to one, or calling it from another site is refused even with a valid session. A script of your own cannot use the API in this mode either: there is no way to get a session without Ring.
+- **Only unset means no sign-in.** A value that is set but empty, or that contains anything that is not a pubky, closes the dashboard completely (`503`) until it is fixed. A typo never opens it.
+- **What a sign-in proves.** Ring signs a one-off request that this server issued for this sign-in attempt. The server accepts it only if the signature is valid and recent, the signing key is in `ADMIN_PUBKEYS`, the request is the one it issued, it has not been used before, and it comes from the browser that started the attempt.
+- **What it cannot prove.** Ring does not show who is asking. It shows only the request, `/homeserver-dashboard/signin/…`. Whoever shows you a QR code or link for that request gets your admin session when you approve it: a look-alike page, or any other app whose "sign in with Ring" asks for it. Approve that request only when you started the sign-in yourself, on this dashboard, and never when signing in to anything else.
+- **The relay.** The signed request travels from Ring to the browser through an HTTP relay: by default the Pubky SDK's, or your own with `AUTH_RELAY`. The relay sees only ciphertext, and what it carries is not enough to sign in. If the relay is unreachable, nobody can sign in.
+- **Use HTTPS when the dashboard is reachable from other machines.** The session cookie is `HttpOnly` and `SameSite=Strict`, and is marked `Secure` when the page is served over HTTPS. Over plain HTTP, anyone on the network path can take it. Requests made on behalf of other websites are refused, including other subdomains of the same domain.
 
 \* Required to use the real homeserver APIs
 

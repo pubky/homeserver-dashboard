@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
 import { isAllowedPublicHostname, resolvesToPublicAddress } from '@/lib/server/hostname';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
@@ -11,7 +12,7 @@ const ROUTE_NAME = '/api/public-health';
  * Probes https://domain to see if the public URL is reachable (e.g. behind Cloudflare Tunnel).
  * Used by the dashboard to show "Public URL reachable: yes/no".
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const domain = request.nextUrl.searchParams.get('domain');
@@ -108,3 +109,5 @@ export async function GET(request: NextRequest) {
     return errorResponse(error, requestId, 'Public URL probe failed');
   }
 }
+
+export const GET = withAdminAuth(handleGet);

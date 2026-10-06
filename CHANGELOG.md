@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Admin sign-in with Pubky Ring. With `ADMIN_PUBKEYS` set to a list of pubkys, every API route except `/api/health` and the sign-in routes refuses requests that do not carry an admin session, and the page shows a QR code to sign in with Ring. The server checks the signature itself and accepts a signed request only from a listed key, only for the one-off request it issued for that attempt, only once, and only from the browser that started the attempt. With sign-in on, the API also answers only requests made by the dashboard page's own script, so sending a signed-in browser to an API address does nothing. A value that is set but empty or invalid closes the dashboard instead of opening it. Without the variable nothing changes, so the Umbrel app, which authenticates in its app proxy, behaves as before. The example systemd unit ships with an empty `ADMIN_PUBKEYS`, closed until a pubky is filled in.
 - The dashboard can run under systemd, without Docker. `npm run bundle` produces the bundle: `.next/standalone` made self-contained, so `node server.js` inside it is the whole application. `deploy/homeserver-dashboard.service` is an example unit that wraps it, bound to loopback, with the homeserver's config read-only and its key hidden.
 - `ADMIN_TOKEN` is now optional. When it is unset, the dashboard reads `[admin] admin_password` from the homeserver's `config.toml` (`HOMESERVER_CONFIG_PATH`) on each request, so an install that can see that file keeps the password in one place and picks up a change without a restart. A set `ADMIN_TOKEN` still wins, so Docker and Umbrel deployments behave as before.
+
+### Security
+
+- A file uploaded by any homeserver user could run as a page on the dashboard's own origin. The file and client proxies relay files with the homeserver's content type, so an uploaded `x.html` opened through `/api/webdav/...` or `/api/client-proxy/...` was served as live HTML, and its script could call the admin API as whoever was looking at the dashboard. Every relayed response, and every other response under `/api`, is now sent as inert content (`Content-Security-Policy: sandbox`, `X-Content-Type-Options: nosniff`, and for relayed files `Content-Disposition: attachment`). This applies with or without admin sign-in. The dashboard page reads these responses with `fetch` and is unaffected.
 
 ### Changed
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { Z32_PUBKEY_RE, computePkarrVerdict, resolvePkarr, type PkarrCheckResult } from '@/lib/server/pkarr-verify';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
@@ -21,7 +22,7 @@ const MAX_EXPECTED_LEN = 260;
  * validated to the z-base-32 alphabet first; the expectations are
  * comparison-only inputs.
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
 
@@ -81,3 +82,5 @@ export async function GET(request: NextRequest) {
     return errorResponse(error, requestId);
   }
 }
+
+export const GET = withAdminAuth(handleGet);

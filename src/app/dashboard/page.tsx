@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminInfo, useAdminActions, useDisabledUsers } from '@/hooks/admin';
 import { usePlatform } from '@/components/providers/PlatformProvider';
+import { AuthGate } from '@/components/organisms/AuthGate';
 import { DashboardNavbar } from '@/components/organisms/DashboardNavbar';
 import { DashboardOverview, useSetupGuideDismissal } from '@/components/organisms/DashboardOverview';
 import { ApiExplorer } from '@/components/organisms/ApiExplorer';
@@ -52,6 +53,14 @@ function TabUnavailableNotice() {
 }
 
 export default function DashboardPage() {
+  return (
+    <AuthGate>
+      <Dashboard />
+    </AuthGate>
+  );
+}
+
+function Dashboard() {
   const platform = usePlatform();
   const {
     data: info,

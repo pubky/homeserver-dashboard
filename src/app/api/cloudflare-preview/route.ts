@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { RouteError, errorResponse } from '@/lib/server/errors';
@@ -74,7 +75,7 @@ async function instantStatus(): Promise<{ status: 'stopped' | 'starting' | 'runn
   return { status: ready ? 'running' : 'starting', url: ready ? (url ?? undefined) : undefined };
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const enabled = await fileExists(PREVIEW_ENV());
   const instant = await instantStatus();
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -228,3 +229,6 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 }
+
+export const GET = withAdminAuth(handleGet);
+export const POST = withAdminAuth(handlePost);

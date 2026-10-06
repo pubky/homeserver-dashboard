@@ -30,6 +30,25 @@ describe('client proxy route', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe('http://homeserver:6286/events/?limit=10');
   });
 
+  it('relays an HTML file a user uploaded as inert content, never as a live page', async () => {
+    const html = '<script>fetch("/api/admin-password")</script>';
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+    const request = new NextRequest('http://localhost:8080/api/client-proxy/pub/x.html');
+
+    const response = await GET(request, { params: Promise.resolve({ path: ['pub', 'x.html'] }) });
+
+    // The page reads it with fetch, so the body and type pass through...
+    expect(await response.text()).toBe(html);
+    expect(response.headers.get('Content-Type')).toBe('text/html');
+    // ...but a browser sent straight to this address must not run it.
+    expect(response.headers.get('Content-Security-Policy')).toContain('sandbox');
+    expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(response.headers.get('Content-Disposition')).toBe('attachment');
+  });
+
   it('reaches the upstream root when no path segments are given', async () => {
     const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('ok', { status: 200 }));
     const request = new NextRequest('http://localhost:8080/api/client-proxy');

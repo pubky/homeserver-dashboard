@@ -21,10 +21,16 @@ WorkingDirectory=/opt/homeserver-dashboard
 ExecStart=/usr/bin/node server.js
 Environment=NODE_ENV=production
 
-# The dashboard has no login of its own: whoever can reach this port is an
-# admin and can reveal the admin password. Keep it on loopback and reach it
-# through an SSH tunnel or a reverse proxy that authenticates. Without
-# HOSTNAME it listens on every interface.
+# Who may sign in, with Pubky Ring: your pubky, or several separated by
+# commas. With this set, every API route needs a signed-in admin. It ships
+# empty, which lets nobody in: the dashboard stays closed until you fill it
+# in. Delete the line only if something in front of the dashboard
+# authenticates; without it there is no login at all.
+Environment=ADMIN_PUBKEYS=
+
+# Listen on loopback only, and reach it through an SSH tunnel or a TLS
+# reverse proxy. Sign-in protects the dashboard; this keeps it off the
+# network as well. Without HOSTNAME it listens on every interface.
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=8080
 

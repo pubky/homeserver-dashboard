@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { RouteError, errorResponse } from '@/lib/server/errors';
@@ -60,7 +61,7 @@ type Step = { key: StepKey; status: StepStatus; detail?: string };
  * The response includes a `steps` array so the UI can show exactly how far
  * setup got, both on success and on failure.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -377,3 +378,5 @@ function mapCfError(e: unknown, area: 'zone' | 'tunnel' | 'dns'): RouteError {
   }
   return new RouteError(502, 'upstream_error', `Cloudflare API error: ${e.messages.join('; ') || `HTTP ${e.status}`}`);
 }
+
+export const POST = withAdminAuth(handlePost);

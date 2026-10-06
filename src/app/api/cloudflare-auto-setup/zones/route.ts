@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { CfApiError, listZones } from '@/lib/server/cloudflare-api';
 import { getPlatform } from '@/lib/server/platform';
@@ -16,7 +17,7 @@ const ROUTE_NAME = '/api/cloudflare-auto-setup/zones';
  * could end up in logs. The token is forwarded to Cloudflare and discarded;
  * it is never persisted or logged (only its length appears in log meta).
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   // Part of the Cloudflare auto-setup flow (Umbrel-only); refuse before
   // proxying the operator's API token to Cloudflare on standalone.
@@ -91,3 +92,5 @@ export async function POST(request: NextRequest) {
     return errorResponse(error, requestId);
   }
 }
+
+export const POST = withAdminAuth(handlePost);

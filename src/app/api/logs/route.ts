@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withAdminAuth } from '@/lib/server/auth/guard';
 import { promises as fs } from 'fs';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
@@ -142,7 +143,7 @@ function parseLines(text: string, dropFirst: boolean): LogLine[] {
  *     early/legacy plain-text log file still renders.
  *   - On a rare rotation/truncation race, the response includes `partial: true`.
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
 
@@ -226,3 +227,5 @@ export async function GET(request: NextRequest) {
     return errorResponse(error, requestId);
   }
 }
+
+export const GET = withAdminAuth(handleGet);
