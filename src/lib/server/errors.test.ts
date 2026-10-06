@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { RouteError, errorResponse, isAbortError, toRouteError } from './errors';
+import { INERT_DOCUMENT_HEADERS } from './inert-content';
 
 describe('RouteError', () => {
   it('carries status, type and public message', () => {
@@ -68,6 +69,14 @@ describe('toRouteError', () => {
 });
 
 describe('errorResponse', () => {
+  it('is inert when opened as a document, since the message can echo the request', () => {
+    const response = errorResponse(new RouteError(400, 'bad_request', 'Unsupported method: <script>'), 'req-1');
+    for (const [name, value] of Object.entries(INERT_DOCUMENT_HEADERS)) {
+      expect(response.headers.get(name)).toBe(value);
+    }
+    expect(response.headers.get('Content-Disposition')).toBeNull();
+  });
+
   it('serializes a RouteError to the {error, type, requestId} envelope', async () => {
     const res = errorResponse(new RouteError(409, 'bad_request', 'Already running'), 'req-1');
     expect(res.status).toBe(409);

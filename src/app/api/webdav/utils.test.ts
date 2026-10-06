@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { proxyWebDavRequest } from './utils';
 
 describe('webdav proxy utils', () => {
@@ -147,6 +148,34 @@ describe('webdav proxy utils', () => {
     expect(response.status).toBe(200);
     const received = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(received)).toEqual(Array.from(downloaded));
+  });
+
+  it('relays an HTML file a user uploaded as inert content, never as a live page', async () => {
+    const html = '<script>fetch("/api/admin-password")</script>';
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+    const request = new NextRequest('http://localhost:8080/api/webdav/user/pub/x.html');
+
+    const response = await proxyWebDavRequest(request, Promise.resolve({ path: ['user', 'pub', 'x.html'] }), 'GET');
+
+    expect(await response.text()).toBe(html);
+    expect(response.headers.get('Content-Type')).toBe('text/html');
+    for (const [name, value] of Object.entries(INERT_CONTENT_HEADERS)) {
+      expect(response.headers.get(name)).toBe(value);
+    }
+  });
+
+  it('marks a bodiless WebDAV answer inert as well', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const request = new NextRequest('http://localhost:8080/api/webdav/user/pub/x.html', { method: 'DELETE' });
+
+    const response = await proxyWebDavRequest(request, Promise.resolve({ path: ['user', 'pub', 'x.html'] }), 'DELETE');
+
+    expect(response.status).toBe(204);
+    for (const [name, value] of Object.entries(INERT_CONTENT_HEADERS)) {
+      expect(response.headers.get(name)).toBe(value);
+    }
   });
 
   it('proxies PROPFIND responses successfully', async () => {

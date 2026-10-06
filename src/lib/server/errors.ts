@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { INERT_DOCUMENT_HEADERS } from '@/lib/server/inert-content';
 
 export type ErrorType =
   | 'bad_request'
@@ -49,6 +50,7 @@ export function errorResponse(error: unknown, requestId: string, fallbackMessage
       type: routeError.type,
       requestId,
     },
-    { status: routeError.status },
+    // Error text can echo the request, so it is never displayed as a page.
+    { status: routeError.status, headers: INERT_DOCUMENT_HEADERS },
   );
 }

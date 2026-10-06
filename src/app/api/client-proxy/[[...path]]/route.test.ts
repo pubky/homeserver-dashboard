@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { GET, POST } from './route';
 
 describe('client proxy route', () => {
@@ -28,6 +29,24 @@ describe('client proxy route', () => {
     expect(await response.text()).toBe('[]');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toBe('http://homeserver:6286/events/?limit=10');
+  });
+
+  it('relays an HTML file a user uploaded as inert content, never as a live page', async () => {
+    const html = '<script>fetch("/api/admin-password")</script>';
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+    const request = new NextRequest('http://localhost:8080/api/client-proxy/pub/x.html');
+
+    const response = await GET(request, { params: Promise.resolve({ path: ['pub', 'x.html'] }) });
+
+    // The page reads it with fetch, so the body and type pass through...
+    expect(await response.text()).toBe(html);
+    expect(response.headers.get('Content-Type')).toBe('text/html');
+    // ...but a browser sent straight to this address must not run it.
+    for (const [name, value] of Object.entries(INERT_CONTENT_HEADERS)) {
+      expect(response.headers.get(name)).toBe(value);
+    }
   });
 
   it('reaches the upstream root when no path segments are given', async () => {
