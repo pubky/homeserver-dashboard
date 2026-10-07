@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.29]
+
+### Fixed
+
+- The arm64 image builds again. The build stage used to run under emulation for arm64, where `npm ci` crashed, so 0.1.28 was tagged but its image was never published. The build stage now runs once on the build machine's own platform and only the runtime stage is built per architecture. The image optimizer is turned off, since the dashboard never used it and its native binaries were the only architecture-specific code in the output. CI now builds both architectures on every pull request.
+
+This is the first published image that carries the 0.1.28 security fix.
+
 ## [0.1.28]
 
 ### Security

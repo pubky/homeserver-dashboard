@@ -1,5 +1,7 @@
-# Build stage
-FROM node:24-alpine AS builder
+# Build stage. Runs on the build machine's own platform, not the target's:
+# the output is JS plus a WASM blob, identical for every target, so a
+# multi-arch build compiles once and never runs Node under emulation.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -14,6 +16,10 @@ COPY . .
 # Server-only environment variables (ADMIN_BASE_URL, ADMIN_TOKEN) are set at runtime via docker-compose
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
+
+# The stage above is only correct while its output has no native code. A
+# native addon would carry the build machine's architecture into every image.
+RUN ! find .next/standalone -name '*.node' | grep .
 
 # Production stage
 FROM node:24-alpine AS runner

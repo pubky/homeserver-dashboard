@@ -6,6 +6,12 @@ const nextConfig = {
   // is CJS + a .wasm file read with __dirname-relative fs, which every
   // bundler mangles. Its files reach the standalone output via file tracing.
   serverExternalPackages: ['@synonymdev/pkarr'],
+  // The dashboard serves its few SVGs as plain files, so the image optimizer
+  // is off. Next still traces the optimizer's native binaries (sharp) into the
+  // standalone output, where they would be the only architecture-specific
+  // code; with the optimizer off nothing loads them, so they are left out.
+  images: { unoptimized: true },
+  outputFileTracingExcludes: { '*': ['node_modules/sharp/**', 'node_modules/@img/**'] },
   // Nothing under /api is ever meant to be displayed as a page. Some of it is
   // relayed from elsewhere (files users uploaded, upstream error pages), so
   // every API response is marked inert: no script, no sniffing, no framing.
