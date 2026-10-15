@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId } from '@/lib/server/logger';
@@ -22,13 +22,12 @@ function sessionToken(password: string): string {
   return createHmac('sha256', password).update('homeserver-dashboard-session').digest('hex');
 }
 
-// Double HMAC under a throwaway key: equal-length digests for timingSafeEqual,
-// and nothing derived from the inputs outlives the comparison.
-const COMPARE_KEY = randomBytes(32);
-
+// Leaks only the length, which timingSafeEqual needs to match. Umbrel's
+// password and the session token both have a fixed length anyway.
 function safeEqual(a: string, b: string): boolean {
-  const digest = (value: string) => createHmac('sha256', COMPARE_KEY).update(value).digest();
-  return timingSafeEqual(digest(a), digest(b));
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export function isPasswordCorrect(candidate: string): boolean {
