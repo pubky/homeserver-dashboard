@@ -64,7 +64,7 @@ async function tailFile(path: string, maxBytes: number): Promise<TailResult> {
 }
 
 // Matches `\x1b[<args><letter>` - CSI sequences from terminal-color output
-// (e.g. `\x1b[2m`, `\x1b[0m`, `\x1b[32m`). pubky-core's tracing subscriber
+// (e.g. `\x1b[2m`, `\x1b[0m`, `\x1b[32m`). Pubky Homeserver's tracing subscriber
 // emits these around timestamp/level/target when colors are on. Strip before
 // parsing or returning, otherwise the UI shows literal `␛[2m...` glyphs.
 const ANSI_CSI = /\x1b\[[0-9;]*[A-Za-z]/g;
@@ -80,7 +80,7 @@ const TRACING_LINE =
   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+(\S+):\s+(.*)$/;
 
 // Matches a bare level prefix on unstructured stderr (e.g. the `WARNING: ...`
-// lines pubky-core prints from `eprintln!` before its tracing subscriber is
+// lines Pubky Homeserver prints from `eprintln!` before its tracing subscriber is
 // initialised). Maps "WARNING" to warn so the level filter and colour coding
 // still work on those lines.
 const LEVEL_PREFIX = /^(TRACE|DEBUG|INFO|WARNING|WARN|ERR(?:OR)?)\s*[:|-]\s*(.*)$/i;
@@ -95,7 +95,7 @@ const LEVEL_PREFIX_MAP: Record<string, string> = {
 };
 
 function parseLine(line: string): LogLine {
-  // JSON-line path: preferred shape, future-proof for when pubky-core ships
+  // JSON-line path: preferred shape, future-proof for when Pubky Homeserver ships
   // the structured logging change we asked for.
   try {
     const parsed = JSON.parse(line);

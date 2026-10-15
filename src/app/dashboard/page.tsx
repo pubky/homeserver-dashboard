@@ -181,7 +181,7 @@ export default function DashboardPage() {
     //   - /api/cloudflare-config - body's `supported` flag drives the Cloudflare tab
     //   - /api/logs - 2xx means the log file is readable, drives the Logs tab
     //   - /api/admin/users/disabled - 2xx means the homeserver exposes the
-    //     disabled-users listing endpoint (pubky-core PR #327); drives the Users tab
+    //     disabled-users listing endpoint (pubky-homeserver PR #327); drives the Users tab
     const detectAvailability = async () => {
       try {
         const [configRes, cloudflareRes, logsRes, disabledUsersRes] = await Promise.all([
@@ -414,7 +414,7 @@ export default function DashboardPage() {
                 </button>
               )}
               <Link
-                href="https://github.com/pubky/pubky-core/"
+                href="https://github.com/pubky/pubky-homeserver/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 transition-colors hover:text-foreground"

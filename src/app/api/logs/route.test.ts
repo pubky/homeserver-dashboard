@@ -114,8 +114,8 @@ describe('logs route', () => {
   });
 
   it('parses tracing-subscriber plain-text format and strips ANSI', async () => {
-    // What pubky-core actually writes today: timestamp + level + target + msg, with ANSI codes
-    // around each field. The dashboard renders this until pubky-core ships JSON-line logging.
+    // What Pubky Homeserver actually writes today: timestamp + level + target + msg, with ANSI codes
+    // around each field. The dashboard renders this until Pubky Homeserver ships JSON-line logging.
     const ansiLine =
       '\x1b[2m2026-05-28T14:07:38.112285Z\x1b[0m \x1b[32m INFO\x1b[0m \x1b[2mpubky_homeserver::data_directory\x1b[0m\x1b[2m:\x1b[0m Use data directory: /data';
     const logPath = path.join(tmpDir, 'homeserver.log');
@@ -157,7 +157,7 @@ describe('logs route', () => {
   });
 
   it('classifies bare WARNING: / ERROR: / INFO: prefixes as level so the filter and colouring still work', async () => {
-    // pubky-core's startup prints `WARNING: ...` via eprintln! before tracing
+    // Pubky Homeserver's startup prints `WARNING: ...` via eprintln! before tracing
     // is initialised, so these lines lack a timestamp/target/level structure.
     const logPath = path.join(tmpDir, 'homeserver.log');
     await fs.writeFile(

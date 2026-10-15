@@ -15,7 +15,7 @@ being told the wrong (or no) address.
 
 ## Background facts (verified against sources, 2026-06)
 
-- The homeserver (pubky-core `key_republisher.rs`) publishes at startup
+- Pubky Homeserver (`key_republisher.rs`) publishes at startup
   (blocking - boot fails if the publish fails) and republishes **hourly**
   with no retry (failures are logged and skipped until the next tick).
 - Its packet contains, all TTL 3600:

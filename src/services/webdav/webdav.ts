@@ -88,7 +88,7 @@ export class WebDavService {
 </d:propfind>`,
       });
     } catch (err) {
-      // PROPFIND 404 means the collection does not exist yet. For pubky-core
+      // PROPFIND 404 means the collection does not exist yet. For Pubky Homeserver
       // that is functionally an empty directory (the homeserver lazily creates
       // a user's namespace on first write), not a fault, so surface it as an
       // empty result. The FileBrowser renders the standard "directory is
