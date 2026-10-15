@@ -31,6 +31,7 @@ import { cfDnsRecordsUrl, cfTunnelsUrl } from '@/lib/server/cloudflare-links';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/cloudflare-auto-setup';
 
@@ -60,7 +61,7 @@ type Step = { key: StepKey; status: StepStatus; detail?: string };
  * The response includes a `steps` array so the UI can show exactly how far
  * setup got, both on success and on failure.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -377,3 +378,5 @@ function mapCfError(e: unknown, area: 'zone' | 'tunnel' | 'dns'): RouteError {
   }
   return new RouteError(502, 'upstream_error', `Cloudflare API error: ${e.messages.join('; ') || `HTTP ${e.status}`}`);
 }
+
+export const POST = withSession(handlePost);

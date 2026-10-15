@@ -107,28 +107,30 @@ The Dockerfile uses Next.js standalone output for optimal image size and include
 
 All variables are server-only (no `NEXT_PUBLIC_*` prefix) and read lazily at request time.
 
-| Variable                  | Description                                                  | Required | Default                                | What breaks without it                                                             |
-| ------------------------- | ------------------------------------------------------------ | -------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `ADMIN_BASE_URL`          | Homeserver admin API base URL                                | Yes\*    | -                                      | Admin proxy, invites, users, file browser all fail                                 |
-| `ADMIN_TOKEN`             | Admin password/token                                         | Yes\*    | -                                      | Same as above, plus the password reveal in Settings                                |
-| `CLIENT_BASE_URL`         | Homeserver client API base URL                               | No       | `http://homeserver:6286`               | API explorer's client group proxies to the wrong host                              |
-| `METRICS_BASE_URL`        | Homeserver metrics base URL                                  | No       | `http://homeserver:6289`               | API explorer's metrics group proxies to the wrong host                             |
-| `HOMESERVER_CONFIG_PATH`  | Path to homeserver `config.toml`                             | No       | `/app/homeserver-data/config.toml`     | Settings config editor, Cloudflare disconnect reset, restart-pending detection     |
-| `HOMESERVER_LOG_PATH`     | Path to homeserver JSON-line log file                        | No       | unset (logs disabled)                  | `/api/logs` answers 503; the Logs tab shows as unavailable                         |
-| `CLOUDFLARE_CONFIG_DIR`   | Cloudflare state dir (token, domain, ...)                    | No       | `/app/cloudflare-config`               | Cloudflare tab reports the feature as unsupported                                  |
-| `CLOUDFLARED_BIN`         | cloudflared binary path                                      | No       | `/usr/local/bin/cloudflared`           | Connect (browser-auth) and Preview (quick tunnel) flows cannot spawn cloudflared   |
-| `CLOUDFLARED_RUNTIME_DIR` | Config dir path as seen by the runtime cloudflared container | No       | `/etc/cloudflared-config`              | Generated `config.yml` points at the wrong `credentials-file` path                 |
-| `PREVIEW_INSTANT_ORIGIN`  | Origin the instant preview tunnel forwards to                | No       | `http://homeserver:6286`               | Preview's instant tunnel forwards to the wrong origin                              |
-| `CF_API_BASE`             | Cloudflare API base URL                                      | No       | `https://api.cloudflare.com/client/v4` | Tests/e2e override only; leave unset in production                                 |
-| `ADMIN_PASSWORD_MANAGED`  | Set `true` on managed platforms (Umbrel)                     | No       | unset                                  | When unset, `admin_password` stays editable; Umbrel sets it to protect the pairing |
-| `PLATFORM`                | `umbrel` on the Umbrel app; unset/anything else = standalone | No       | unset (standalone)                     | See "Standalone vs Umbrel" below                                                   |
-| `PORT` / `HOSTNAME`       | Next.js standalone server binding                            | No       | `8080` / `0.0.0.0` (Dockerfile)        | Server binds elsewhere                                                             |
+| Variable                  | Description                                                  | Required | Default                                | What breaks without it                                                                             |
+| ------------------------- | ------------------------------------------------------------ | -------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `ADMIN_BASE_URL`          | Homeserver admin API base URL                                | Yes\*    | -                                      | Admin proxy, invites, users, file browser all fail                                                 |
+| `ADMIN_TOKEN`             | Admin password/token                                         | Yes\*    | -                                      | Same as above, plus the password reveal in Settings                                                |
+| `CLIENT_BASE_URL`         | Homeserver client API base URL                               | No       | `http://homeserver:6286`               | API explorer's client group proxies to the wrong host                                              |
+| `METRICS_BASE_URL`        | Homeserver metrics base URL                                  | No       | `http://homeserver:6289`               | API explorer's metrics group proxies to the wrong host                                             |
+| `HOMESERVER_CONFIG_PATH`  | Path to homeserver `config.toml`                             | No       | `/app/homeserver-data/config.toml`     | Settings config editor, Cloudflare disconnect reset, restart-pending detection                     |
+| `HOMESERVER_LOG_PATH`     | Path to homeserver JSON-line log file                        | No       | unset (logs disabled)                  | `/api/logs` answers 503; the Logs tab shows as unavailable                                         |
+| `CLOUDFLARE_CONFIG_DIR`   | Cloudflare state dir (token, domain, ...)                    | No       | `/app/cloudflare-config`               | Cloudflare tab reports the feature as unsupported                                                  |
+| `CLOUDFLARED_BIN`         | cloudflared binary path                                      | No       | `/usr/local/bin/cloudflared`           | Connect (browser-auth) and Preview (quick tunnel) flows cannot spawn cloudflared                   |
+| `CLOUDFLARED_RUNTIME_DIR` | Config dir path as seen by the runtime cloudflared container | No       | `/etc/cloudflared-config`              | Generated `config.yml` points at the wrong `credentials-file` path                                 |
+| `PREVIEW_INSTANT_ORIGIN`  | Origin the instant preview tunnel forwards to                | No       | `http://homeserver:6286`               | Preview's instant tunnel forwards to the wrong origin                                              |
+| `CF_API_BASE`             | Cloudflare API base URL                                      | No       | `https://api.cloudflare.com/client/v4` | Tests/e2e override only; leave unset in production                                                 |
+| `ADMIN_PASSWORD_MANAGED`  | Set `true` on managed platforms (Umbrel)                     | No       | unset                                  | When unset, `admin_password` stays editable; Umbrel sets it to protect the pairing                 |
+| `PLATFORM`                | `umbrel` on the Umbrel app; unset/anything else = standalone | No       | unset (standalone)                     | See "Standalone vs Umbrel" below                                                                   |
+| `DASHBOARD_PASSWORD`      | Password for the dashboard login                             | No       | unset (no login)                       | No login: anyone who can reach the port gets the full dashboard. The Umbrel app sets it, see below |
+| `PORT` / `HOSTNAME`       | Next.js standalone server binding                            | No       | `8080` / `0.0.0.0` (Dockerfile)        | Server binds elsewhere                                                                             |
 
 ### Standalone vs Umbrel
 
 The same image serves both deployments; `PLATFORM` selects the experience:
 
 - **`PLATFORM=umbrel`** (set by the Umbrel app): shows the Cloudflare setup tab and flows, umbrelOS backup guidance, and "restart the app from Umbrel" copy.
+- **`DASHBOARD_PASSWORD`** (set by the Umbrel app to the password Umbrel generates for it): every page and API route except `/api/health` needs a login. The Umbrel login only covers browsers; other apps' containers share the Docker network and could reach the dashboard port directly. Standalone deployments leave it unset and keep the dashboard as it was, protected by whatever fronts it.
 - **unset / standalone**: the Cloudflare _setup_ UI and its `/cloudflare-guide` are hidden, and the Cloudflare setup API routes return `404 not_supported` — the dashboard doesn't run the cloudflared containers a standalone deployment lacks, so the tunnel can't be established here. The read-only status views (public address, reachability, the pkarr "Pubky network" check) stay, so if you front the homeserver with your own reverse proxy or tunnel you can still see whether it's reachable and correctly published. Restart copy and the backup note are generic.
 
 \* Required to use the real homeserver APIs

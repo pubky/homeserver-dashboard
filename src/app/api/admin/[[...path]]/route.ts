@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError } from '@/lib/server/logger';
 import { proxyToUpstream } from '@/lib/server/upstream-proxy';
+import { withSession } from '@/lib/server/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,22 +10,22 @@ const ROUTE_NAME = '/api/admin/[[...path]]';
 
 type RouteParams = { params: Promise<{ path?: string[] }> };
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+async function handleGet(request: NextRequest, { params }: RouteParams) {
   const { path } = await params;
   return proxyRequest(request, path ?? [], 'GET');
 }
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
+async function handlePost(request: NextRequest, { params }: RouteParams) {
   const { path } = await params;
   return proxyRequest(request, path ?? [], 'POST');
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+async function handlePut(request: NextRequest, { params }: RouteParams) {
   const { path } = await params;
   return proxyRequest(request, path ?? [], 'PUT');
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+async function handleDelete(request: NextRequest, { params }: RouteParams) {
   const { path } = await params;
   return proxyRequest(request, path ?? [], 'DELETE');
 }
@@ -55,3 +56,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
     defaultContentType: 'application/json',
   });
 }
+
+export const GET = withSession(handleGet);
+export const POST = withSession(handlePost);
+export const PUT = withSession(handlePut);
+export const DELETE = withSession(handleDelete);

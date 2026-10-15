@@ -30,6 +30,7 @@ import { detectCloudflareMode } from '@/lib/server/cloudflare-mode';
 import { teardownPreview } from '@/lib/server/preview-teardown';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 import { getPlatform } from '@/lib/server/platform';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/cloudflare-preview';
 
@@ -74,7 +75,7 @@ async function instantStatus(): Promise<{ status: 'stopped' | 'starting' | 'runn
   return { status: ready ? 'running' : 'starting', url: ready ? (url ?? undefined) : undefined };
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const enabled = await fileExists(PREVIEW_ENV());
   const instant = await instantStatus();
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -228,3 +229,6 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 }
+
+export const GET = withSession(handleGet);
+export const POST = withSession(handlePost);

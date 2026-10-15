@@ -1,19 +1,25 @@
 import { NextRequest } from 'next/server';
 import { proxyWebDavRequest } from '../utils';
+import { withSession } from '@/lib/server/session';
 
 // Handle all HTTP methods for WebDAV
-export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+async function handleGet(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return proxyWebDavRequest(request, params, 'GET');
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+async function handlePut(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return proxyWebDavRequest(request, params, 'PUT');
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+async function handleDelete(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return proxyWebDavRequest(request, params, 'DELETE');
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+async function handlePost(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   return proxyWebDavRequest(request, params, 'POST');
 }
+
+export const GET = withSession(handleGet);
+export const PUT = withSession(handlePut);
+export const DELETE = withSession(handleDelete);
+export const POST = withSession(handlePost);

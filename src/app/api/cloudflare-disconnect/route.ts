@@ -23,6 +23,7 @@ import { teardownPreview } from '@/lib/server/preview-teardown';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/cloudflare-disconnect';
 const HOMESERVER_CONFIG = () => process.env.HOMESERVER_CONFIG_PATH || '/app/homeserver-data/config.toml';
@@ -44,7 +45,7 @@ const HOMESERVER_CONFIG = () => process.env.HOMESERVER_CONFIG_PATH || '/app/home
  * because reusing the same hostname later requires removing the old DNS
  * record in the Cloudflare dashboard first.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -154,3 +155,5 @@ export async function POST(request: NextRequest) {
     );
   } // end runDisconnect
 }
+
+export const POST = withSession(handlePost);
