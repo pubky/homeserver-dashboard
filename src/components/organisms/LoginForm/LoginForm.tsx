@@ -45,7 +45,7 @@ export function LoginForm() {
             <CardTitle>Log in</CardTitle>
             <CardDescription>
               {platform === 'umbrel'
-                ? 'Enter the dashboard password. Umbrel shows it when you first open the app, and again if you right-click the app icon and choose Show default credentials.'
+                ? "Enter the dashboard password. Umbrel shows it when you open the app, and in the app's Settings under Default credentials (right-click the app icon, then Settings)."
                 : 'Enter the dashboard password.'}
             </CardDescription>
           </CardHeader>
