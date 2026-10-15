@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId } from '@/lib/server/logger';
@@ -22,9 +22,13 @@ function sessionToken(password: string): string {
   return createHmac('sha256', password).update('homeserver-dashboard-session').digest('hex');
 }
 
-// Hashing first gives equal lengths, which timingSafeEqual requires.
+// Double HMAC under a throwaway key: equal-length digests for timingSafeEqual,
+// and nothing derived from the inputs outlives the comparison.
+const COMPARE_KEY = randomBytes(32);
+
 function safeEqual(a: string, b: string): boolean {
-  return timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+  const digest = (value: string) => createHmac('sha256', COMPARE_KEY).update(value).digest();
+  return timingSafeEqual(digest(a), digest(b));
 }
 
 export function isPasswordCorrect(candidate: string): boolean {
