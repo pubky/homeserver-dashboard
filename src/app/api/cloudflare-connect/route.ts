@@ -42,6 +42,7 @@ import { teardownPreview } from '@/lib/server/preview-teardown';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/cloudflare-connect';
 const FALLBACK_TUNNEL_NAME = 'pubky-homeserver-local';
@@ -113,7 +114,7 @@ async function currentStatus(): Promise<{
   return { status: 'idle' };
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const status = await currentStatus();
   return NextResponse.json(
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -471,3 +472,6 @@ function lastLine(output: string): string {
   const lines = output.trim().split('\n').filter(Boolean);
   return lines[lines.length - 1] ?? 'unknown error';
 }
+
+export const GET = withSession(handleGet);
+export const POST = withSession(handlePost);

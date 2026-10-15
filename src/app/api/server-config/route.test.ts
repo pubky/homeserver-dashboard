@@ -57,6 +57,10 @@ describe('server-config route', () => {
     return serverConfigRoute;
   }
 
+  function getRequest(): NextRequest {
+    return new NextRequest('http://localhost:8080/api/server-config');
+  }
+
   function postRequest(body: unknown): NextRequest {
     return new NextRequest('http://localhost:8080/api/server-config', {
       method: 'POST',
@@ -68,7 +72,7 @@ describe('server-config route', () => {
   describe('GET', () => {
     it('returns 404 when the config file does not exist', async () => {
       const { GET } = await loadRoute();
-      const response = await GET();
+      const response = await GET(getRequest());
       const payload = await response.json();
       expect(response.status).toBe(404);
       expect(payload.type).toBe('not_found');
@@ -77,7 +81,7 @@ describe('server-config route', () => {
     it('returns config + checksum + mtime + writable', async () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       const { GET } = await loadRoute();
-      const response = await GET();
+      const response = await GET(getRequest());
       const payload = await response.json();
       expect(response.status).toBe(200);
       expect(payload).toMatchObject({
@@ -92,7 +96,7 @@ describe('server-config route', () => {
     it('redacts admin_password and database_url', async () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       const { GET } = await loadRoute();
-      const payload = await (await GET()).json();
+      const payload = await (await GET(getRequest())).json();
       expect(payload.config).not.toContain('real-admin-password');
       expect(payload.config).not.toContain('postgres://localhost:5432');
       expect(payload.config).toContain('"********"');
@@ -102,7 +106,7 @@ describe('server-config route', () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       await fs.chmod(configPath, 0o444);
       const { GET } = await loadRoute();
-      const payload = await (await GET()).json();
+      const payload = await (await GET(getRequest())).json();
       expect(payload.writable).toBe(false);
       // Diagnostics let an operator debug a stuck Read-only badge from browser
       // dev tools without SSH access.
@@ -117,7 +121,7 @@ describe('server-config route', () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       await fs.chmod(configPath, 0o660);
       const { GET } = await loadRoute();
-      const payload = await (await GET()).json();
+      const payload = await (await GET(getRequest())).json();
       expect(payload.diagnostics.file.mode).toBe('0660');
       expect(payload.diagnostics.process.uid).toBe(process.getuid?.() ?? null);
       expect(payload.diagnostics.writable_error).toBeUndefined();
@@ -129,7 +133,7 @@ describe('server-config route', () => {
       // Both opens (r+ and the read-only fallback) fail. The route catches and
       // maps to a sanitised 500 - we do not leak the underlying error message.
       vi.spyOn(fs, 'open').mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
-      const response = await GET();
+      const response = await GET(getRequest());
       const payload = await response.json();
       expect(response.status).toBe(500);
       expect(payload.type).toBe('internal_error');
@@ -255,7 +259,7 @@ describe('server-config route', () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       const { GET, POST } = await loadRoute();
       // What the UI would see in GET - admin_password is masked
-      const redactedView = (await (await GET()).json()).config as string;
+      const redactedView = (await (await GET(getRequest())).json()).config as string;
       expect(redactedView).toContain('admin_password = "********"');
       expect(redactedView).not.toContain('real-admin-password');
 
@@ -306,7 +310,7 @@ describe('server-config route', () => {
       await fs.writeFile(configPath, VALID_CONFIG, 'utf-8');
       process.env.ADMIN_PASSWORD_MANAGED = 'true';
       const { GET, POST } = await loadRoute();
-      const redactedView = (await (await GET()).json()).config as string;
+      const redactedView = (await (await GET(getRequest())).json()).config as string;
       const userEdit = redactedView.replace('token_required', 'open');
       const response = await POST(postRequest({ config_toml: userEdit, checksum: sha256(VALID_CONFIG) }));
       expect(response.status).toBe(200);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/admin-password';
 
@@ -16,7 +17,7 @@ const ROUTE_NAME = '/api/admin-password';
  * only returned on explicit request, never embedded in other responses,
  * and never logged.
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
 
@@ -45,3 +46,5 @@ export async function GET(request: NextRequest) {
   });
   return NextResponse.json({ password, requestId }, { headers: { 'Cache-Control': 'no-store' } });
 }
+
+export const GET = withSession(handleGet);

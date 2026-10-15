@@ -29,7 +29,7 @@ import Link from 'next/link';
 // The dashboard's own release version. The homeserver's version (from /info)
 // is shown on the Overview card, explicitly labeled; mixing the two in the
 // footer confused operators comparing against the Umbrel app version.
-import packageJson from '../../../package.json';
+import packageJson from '../../../../package.json';
 const dashboardVersion = packageJson.version;
 
 // Tab availability: 'unknown' hides the tab (the endpoint never answered),

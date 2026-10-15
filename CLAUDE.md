@@ -21,9 +21,12 @@ permission change here can break the others.
   reveals the API tab.
 - Read env at request time, never at module scope. The image is built once and gets its env, such
   as `PLATFORM=umbrel`, only when it runs, so a value read at build time is frozen into the image.
-- The dashboard has no login: whoever can reach its port is an admin and can read the admin
-  password. Only Umbrel's app proxy authenticates. Outside Umbrel, never bind it beyond loopback or
+- The login only exists when `DASHBOARD_PASSWORD` is set (the Umbrel app sets it). Unset, whoever
+  can reach the port is an admin and can read the admin password; never bind it beyond loopback or
   suggest exposing it without an authenticating proxy in front.
+- Every API route except `/api/health` and `/api/auth/login` is wrapped in `withSession`, and
+  `session-guard.test.ts` fails on a route that is not. Do not move the check into a Next proxy: it
+  buffers request bodies and truncates them past its size limit, which cuts large uploads.
 
 ## Testing
 

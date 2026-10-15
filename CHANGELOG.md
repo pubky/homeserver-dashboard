@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.30]
+
+### Added
+
+- Optional dashboard login. When `DASHBOARD_PASSWORD` is set, the dashboard asks for it once per browser and every page and API route except `/api/health` refuses requests without the session cookie. The cookie is derived from the password, so changing the password logs everyone out. The Umbrel app sets it to the password Umbrel generates for the app: the Umbrel login only covers browsers, and without this any other app's container on the same Umbrel could call the dashboard, including the route that reveals the homeserver admin password. Unset, nothing changes.
+
 ## [0.1.29]
 
 ### Fixed

@@ -6,6 +6,7 @@ import { RouteError, errorResponse } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
+import { withSession } from '@/lib/server/session';
 
 // Env is read lazily (call time, not module load), following the convention
 // in cloudflared-process.ts, so tests and multi-env deployments are never
@@ -114,7 +115,7 @@ function validateTomlStructure(toml: string): RouteError | null {
  * mtime (for the "differs from running" indicator), and whether the file is
  * writable (drives whether the UI shows the edit affordance).
  */
-export async function GET() {
+async function handleGet() {
   const requestId = randomUUID();
   const startedAt = Date.now();
   const configPath = getConfigPath();
@@ -227,7 +228,7 @@ export async function GET() {
  * Write is atomic: temp file in the same directory then rename. A crash
  * mid-write leaves the original file intact.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const configPath = getConfigPath();
@@ -414,3 +415,6 @@ export async function POST(request: NextRequest) {
     requestId,
   });
 }
+
+export const GET = withSession<[]>(handleGet);
+export const POST = withSession(handlePost);

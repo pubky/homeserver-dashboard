@@ -10,6 +10,7 @@ import { detectRestartPending } from '@/lib/server/restart-pending';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/cloudflare-config';
 // Env is read lazily via getConfigDir() (call time, not module load),
@@ -49,7 +50,7 @@ async function isCloudflareConfigSupported(): Promise<boolean> {
  * any other failure is an honest 500 so the client can retry instead of
  * hiding the tab.
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const supported = await isCloudflareConfigSupported();
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
  * Body: { token?: string, domain?: string }
  * Writes to mounted volume so homeserver and cloudflared pick up after restart.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = getRequestId(request);
   if (getPlatform() !== 'umbrel') {
     return errorResponse(
@@ -294,3 +295,6 @@ export async function POST(request: NextRequest) {
     return errorResponse(error, requestId);
   }
 }
+
+export const GET = withSession(handleGet);
+export const POST = withSession(handlePost);

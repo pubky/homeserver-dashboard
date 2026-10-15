@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
+import { withSession } from '@/lib/server/session';
 
 const ROUTE_NAME = '/api/admin/generate_signup_token';
 const UPSTREAM_TIMEOUT_MS = 8000;
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const baseUrl = process.env.ADMIN_BASE_URL;
@@ -74,3 +75,5 @@ export async function GET(request: NextRequest) {
     return errorResponse(mapped, requestId);
   }
 }
+
+export const GET = withSession(handleGet);
