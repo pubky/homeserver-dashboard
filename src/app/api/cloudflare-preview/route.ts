@@ -181,11 +181,21 @@ async function handlePost(request: NextRequest) {
 
         // Instant tunnel so the user gets a working URL right away (uncapped;
         // it dies with the container and the compose service takes over after
-        // the restart that actually publishes the address).
+        // the restart that actually publishes the address). Quick tunnels start
+        // on QUIC and never fall back, so pin http2: it works where UDP 7844 is
+        // blocked.
         const existing = await instantStatus();
         if (existing.status === 'stopped') {
           spawned = await spawnDetached(
-            [getCloudflaredBin(), 'tunnel', '--no-autoupdate', '--url', getPreviewInstantOrigin()],
+            [
+              getCloudflaredBin(),
+              'tunnel',
+              '--no-autoupdate',
+              '--protocol',
+              'http2',
+              '--url',
+              getPreviewInstantOrigin(),
+            ],
             PREVIEW_INSTANT_LOG(),
           );
           await writeState(PREVIEW_INSTANT_STATE(), { ...spawned, started_at: new Date().toISOString() });
