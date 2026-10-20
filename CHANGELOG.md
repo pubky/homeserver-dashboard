@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.32]
+
+### Fixed
+
+- Preview mode's instant tunnel now uses http2. Quick tunnels start on QUIC (UDP 7844) and never fall back, so on a network that blocks that port the preview address never connected.
+
 ## [0.1.31]
 
 ### Fixed

@@ -106,6 +106,7 @@ describe('cloudflare-preview route', () => {
     expect(spawnArgs[0]).toContain('cloudflared');
     expect(spawnArgs).not.toContain('timeout');
     expect(spawnArgs).toContain('--url');
+    expect(spawnArgs.join(' ')).toContain('--protocol http2');
   });
 
   it('enable succeeds when the preview dir is not owned by this process (real-container EPERM)', async () => {
