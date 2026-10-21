@@ -1,7 +1,7 @@
 # Build stage. Runs on the build machine's own platform, not the target's:
 # the output is JS plus a WASM blob, identical for every target, so a
 # multi-arch build compiles once and never runs Node under emulation.
-FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:24.22.1-alpine AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ RUN npm run build
 RUN ! find .next/standalone -name '*.node' | grep .
 
 # Production stage
-FROM node:24-alpine AS runner
+FROM node:24.22.1-alpine AS runner
 
 WORKDIR /app
 

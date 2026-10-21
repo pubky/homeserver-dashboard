@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.33]
+
+### Security
+
+- The image runs on Node.js 24.22.1, the October 21, 2026 security release, which fixes HIGH severity issues in the 24.x line. Both Dockerfile stages are pinned to `node:24.22.1-alpine` instead of the floating `node:24-alpine`, so the release is guaranteed to carry the patched runtime rather than whatever tag a build cache held.
+
 ## [0.1.32]
 
 ### Fixed
