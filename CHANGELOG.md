@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - The image runs on Node.js 24.22.1, the October 21, 2026 security release, which fixes HIGH severity issues in the 24.x line. Both Dockerfile stages are pinned to `node:24.22.1-alpine` instead of the floating `node:24-alpine`, so the release is guaranteed to carry the patched runtime rather than whatever tag a build cache held.
+- The image embeds cloudflared 2026.10.3, copied from `cloudflare/cloudflared:2026.10.3` and pinned by its multi-arch index digest. cloudflared before 2026.10.2 still trusts eight eMudhra/emSign intermediate certificates whose private keys are weak, so a tunnel can accept a forged certificate ([Cloudflare, October 2026](https://blog.cloudflare.com/emudhra-certificate-compromise)). 2026.10.3 is the current release: it includes that trust-store fix and refreshes the distroless base image and Go toolchain.
 
 ## [0.1.32]
 

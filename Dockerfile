@@ -61,7 +61,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@synonymdev/pkarr ./
 # tunnel) setup flows. Pinned by digest, copied from the official image -
 # same supply-chain posture as the runtime cloudflared container. Static Go
 # binary, runs fine on alpine/musl.
-COPY --from=cloudflare/cloudflared:2026.5.2@sha256:12ff5c6992a9863db4da270746af7c244bcaee49353039af8104268a18d6c4f0 /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+# 2026.10.2 stopped trusting the eight weak eMudhra/emSign intermediates
+# (Cloudflare, October 2026). 2026.10.3 is the current release: it keeps
+# that fix and refreshes the distroless base image and Go toolchain.
+# Digest is the multi-arch index (linux/amd64 and linux/arm64).
+COPY --from=cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39 /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 
 # Boot-time migration for legacy token-mode installs (run by the entrypoint
 # as root before the perm phase). Self-contained ESM, no app imports.
