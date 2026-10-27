@@ -119,11 +119,6 @@ export default function CloudflareGuidePage() {
                   </CodeBlock>
                   Copy the <Code>&lt;LONG-STRING&gt;</Code> part only (the value after <Code>--token</Code>). It starts
                   with <Code>eyJ</Code> and looks like base64. This is your tunnel token. Save it for Part B.
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    If you already ran cloudflared yourself, pull the latest <Code>cloudflare/cloudflared</Code> image
-                    and recreate that container. Versions before 2026.10.2 still trust eight eMudhra intermediate
-                    certificates whose private keys are weak.
-                  </p>
                 </li>
                 <li>
                   Click <strong>Next</strong>. Cloudflare may still say <em>No connectors installed</em> at this point,
