@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.34]
+
+### Security
+
+- Next.js is upgraded from 16.2.6 to 16.4.5. The React Server Components runtime bundled in Next.js before 16.4.1 allows unauthenticated remote code execution through a crafted Flight payload ([GHSA-xqc2-xf4c-x3h3](https://github.com/facebook/react/security/advisories/GHSA-xqc2-xf4c-x3h3), critical). 16.4.1 also fixes an unauthenticated RCE in the image optimizer when SVG files are used ([GHSA-2464-fhr4-w9xw](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw), critical) and a Server Actions denial of service ([GHSA-p3m5-59mp-jv5r](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r)). 16.4.5 is the current release and adds the November 3, 2026 fixes, among them an HttpOnly cookie exposure on Edge routes ([GHSA-f3mh-rxg3-f5g2](https://github.com/vercel/next.js/security/advisories/GHSA-f3mh-rxg3-f5g2)).
+
 ## [0.1.33]
 
 ### Security
