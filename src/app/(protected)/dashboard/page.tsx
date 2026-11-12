@@ -12,6 +12,8 @@ import { DisabledUsersManagement } from '@/components/organisms/DisabledUsersMan
 import { ConfigDialog } from '@/components/organisms/ConfigDialog';
 import { InviteManagement } from '@/components/organisms/InviteManagement';
 import { DashboardLogs } from '@/components/organisms/DashboardLogs';
+import { SignupTokenList } from '@/components/organisms/SignupTokenList';
+import type { UserQuota } from '@/services/admin/admin.types';
 import {
   Github,
   BookOpen,
@@ -68,7 +70,6 @@ export default function DashboardPage() {
     isDisablingUser,
     isEnablingUser,
     generateInviteError,
-    generatedInvites,
   } = useAdminActions();
   const {
     items: disabledUsers,
@@ -101,7 +102,12 @@ export default function DashboardPage() {
   const [canOpenSettings, setCanOpenSettings] = useState(true);
   const [logsTab, setLogsTab] = useState<TabAvailability>('unknown');
   const [usersTab, setUsersTab] = useState<TabAvailability>('unknown');
+  // The invite code list on the Invites tab needs the homeserver's admin listing route.
+  const [hasSignupTokenList, setHasSignupTokenList] = useState(false);
+  const [signupTokensRefreshKey, setSignupTokensRefreshKey] = useState(0);
   const [configWritable, setConfigWritable] = useState(false);
+  // The homeserver's default limits, from config.toml when the dashboard can read it; null when it cannot.
+  const [homeserverDefaults, setHomeserverDefaults] = useState<UserQuota | null>(null);
 
   const handleSettingsClick = useCallback(() => {
     setIsConfigDialogOpen(true);
@@ -125,16 +131,18 @@ export default function DashboardPage() {
     if (!open) setCloudflareRefreshKey((n) => n + 1);
   }, []);
 
-  const handleGenerateInvite = useCallback(async () => {
-    // The failure is surfaced via generateInviteError; swallowing the throw
-    // here keeps it out of the console as an unhandled rejection.
-    try {
-      await generateInvite();
-    } catch {
-      return;
-    }
-    await refetchInfo();
-  }, [generateInvite, refetchInfo]);
+  const handleGenerateInvite = useCallback(
+    async (limits?: UserQuota) => {
+      // The failure is surfaced via generateInviteError; the throw is passed on
+      // so the card knows nothing was created. The new code is not held back
+      // for the stats to be read again.
+      const token = await generateInvite(limits);
+      setSignupTokensRefreshKey((n) => n + 1);
+      void refetchInfo();
+      return token;
+    },
+    [generateInvite, refetchInfo],
+  );
 
   const handleDisableUser = useCallback(
     async (pubkey: string) => {
@@ -182,13 +190,16 @@ export default function DashboardPage() {
     //   - /api/logs - 2xx means the log file is readable, drives the Logs tab
     //   - /api/admin/users/disabled - 2xx means the homeserver exposes the
     //     disabled-users listing endpoint (pubky-homeserver PR #327); drives the Users tab
+    //   - /api/admin/signup_tokens - 2xx means the homeserver lists its invite
+    //     codes; drives the code list on the Invites tab
     const detectAvailability = async () => {
       try {
-        const [configRes, cloudflareRes, logsRes, disabledUsersRes] = await Promise.all([
+        const [configRes, cloudflareRes, logsRes, disabledUsersRes, signupTokensRes] = await Promise.all([
           fetch('/api/server-config'),
           fetch('/api/cloudflare-config'),
           fetch('/api/logs?lines=0'),
           fetch('/api/admin/users/disabled?limit=1'),
+          fetch('/api/admin/signup_tokens?limit=1'),
         ]);
 
         let isCloudflareSupported = false;
@@ -202,16 +213,20 @@ export default function DashboardPage() {
         }
 
         let isConfigWritable = false;
+        let defaults: UserQuota | null = null;
         if (configRes.ok) {
-          const configData = (await configRes.json()) as { writable?: boolean };
+          const configData = (await configRes.json()) as { writable?: boolean; defaultQuota?: UserQuota };
           isConfigWritable = Boolean(configData.writable);
+          defaults = configData.defaultQuota ?? null;
         }
 
         if (!cancelled) {
           setCanOpenSettings(configRes.ok || isCloudflareSupported);
           setConfigWritable(isConfigWritable);
+          setHomeserverDefaults(defaults);
           setLogsTab((prev) => (logsRes.ok ? 'available' : downgrade(prev)));
           setUsersTab((prev) => (disabledUsersRes.ok ? 'available' : downgrade(prev)));
+          setHasSignupTokenList(signupTokensRes.ok);
         }
       } catch {
         // Keep settings button visible when detection fails to avoid blocking access.
@@ -219,6 +234,7 @@ export default function DashboardPage() {
           setCanOpenSettings(true);
           setLogsTab(downgrade);
           setUsersTab(downgrade);
+          setHasSignupTokenList(false);
         }
       }
     };
@@ -339,7 +355,6 @@ export default function DashboardPage() {
 
             <TabsContent value="invites" className="space-y-4">
               <InviteManagement
-                invites={generatedInvites}
                 onGenerate={handleGenerateInvite}
                 isGenerating={isGeneratingInvite}
                 generateError={generateInviteError?.message ?? null}
@@ -348,7 +363,10 @@ export default function DashboardPage() {
                 isStatsLoading={infoLoading}
                 homeserverPubkey={info?.public_key ?? info?.pubkey}
                 onRefreshStats={refreshInfo}
+                homeserverDefaults={homeserverDefaults}
+                codesListed={hasSignupTokenList}
               />
+              {hasSignupTokenList && <SignupTokenList refreshKey={signupTokensRefreshKey} />}
             </TabsContent>
 
             <TabsContent value="files" className="space-y-4">

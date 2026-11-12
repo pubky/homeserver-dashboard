@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET } from './route';
+import { GET, POST } from './route';
 
 describe('generate_signup_token route', () => {
   const originalEnv = { ...process.env };
@@ -40,6 +40,44 @@ describe('generate_signup_token route', () => {
     const [urlArg, initArg] = fetchMock.mock.calls[0];
     expect(String(urlArg)).toBe('http://homeserver:6286/generate_signup_token');
     expect((initArg as RequestInit).headers).toEqual(expect.objectContaining({ 'X-Admin-Password': 'secret-token' }));
+  });
+
+  it('POST passes the limits through as JSON and returns the token', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('the-token', { status: 200 }));
+    const request = new NextRequest('http://localhost:8080/api/admin/generate_signup_token', {
+      method: 'POST',
+      body: JSON.stringify({ storage_quota_mb: 500 }),
+      headers: { 'content-type': 'application/json' },
+    });
+    const response = await POST(request);
+    expect((await response.json()).token).toBe('the-token');
+    const [, initArg] = fetchMock.mock.calls[0];
+    expect((initArg as RequestInit).method).toBe('POST');
+    expect((initArg as RequestInit).body).toBe('{"storage_quota_mb":500}');
+    expect((initArg as RequestInit).headers).toEqual(
+      expect.objectContaining({ 'X-Admin-Password': 'secret-token', 'Content-Type': 'application/json' }),
+    );
+  });
+
+  it('relays what the homeserver says is wrong with the limits', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('Invalid rate format: 10mb', { status: 422 }));
+    const request = new NextRequest('http://localhost:8080/api/admin/generate_signup_token', {
+      method: 'POST',
+      body: '{}',
+    });
+    const response = await POST(request);
+    const payload = await response.json();
+    expect(response.status).toBe(422);
+    expect(payload.error).toBe('Invalid rate format: 10mb');
+  });
+
+  it('does not relay a 5xx body, and cuts a long 4xx reason short', async () => {
+    const post = () =>
+      POST(new NextRequest('http://localhost:8080/api/admin/generate_signup_token', { method: 'POST', body: '{}' }));
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(new Response('panic at db.rs:42', { status: 500 }));
+    expect((await (await post()).json()).error).toBe('Failed to generate invite token');
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(new Response('x'.repeat(500), { status: 400 }));
+    expect((await (await post()).json()).error).toHaveLength(200);
   });
 
   it('never leaks the admin token in the response payload', async () => {
