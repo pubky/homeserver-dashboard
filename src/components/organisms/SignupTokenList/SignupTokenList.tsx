@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSignupTokens } from '@/hooks/admin';
@@ -60,16 +61,7 @@ export function SignupTokenList({ refreshKey = 0 }: SignupTokenListProps) {
   const reportsLimits = items.some((item) => item.quota !== undefined);
 
   const copyButton = (value: string, key: string, label: string) => (
-    <Button
-      variant={copiedKey === key ? 'secondary' : 'ghost'}
-      size="icon"
-      className="h-8 w-8 shrink-0"
-      onClick={() => void copy(value, key)}
-      title={copiedKey === key ? 'Copied' : label}
-      aria-label={copiedKey === key ? `Copied: ${label}` : label}
-    >
-      {copiedKey === key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-    </Button>
+    <CopyButton label={label} copied={copiedKey === key} onCopy={() => void copy(value, key)} />
   );
 
   const row = (item: SignupToken) => (
