@@ -10,30 +10,13 @@ const ROUTE_NAME = '/api/admin/[[...path]]';
 
 type RouteParams = { params: Promise<{ path?: string[] }> };
 
-async function handleGet(request: NextRequest, { params }: RouteParams) {
-  const { path } = await params;
-  return proxyRequest(request, path ?? [], 'GET');
-}
-
-async function handlePost(request: NextRequest, { params }: RouteParams) {
-  const { path } = await params;
-  return proxyRequest(request, path ?? [], 'POST');
-}
-
-async function handlePut(request: NextRequest, { params }: RouteParams) {
-  const { path } = await params;
-  return proxyRequest(request, path ?? [], 'PUT');
-}
-
-async function handlePatch(request: NextRequest, { params }: RouteParams) {
-  const { path } = await params;
-  return proxyRequest(request, path ?? [], 'PATCH');
-}
-
-async function handleDelete(request: NextRequest, { params }: RouteParams) {
-  const { path } = await params;
-  return proxyRequest(request, path ?? [], 'DELETE');
-}
+/** The handler for one HTTP method: everything under /api/admin goes to the homeserver's admin API as it came. */
+const proxy =
+  (method: string) =>
+  async (request: NextRequest, { params }: RouteParams) => {
+    const { path } = await params;
+    return proxyRequest(request, path ?? [], method);
+  };
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
   const baseUrl = process.env.ADMIN_BASE_URL;
@@ -62,8 +45,8 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
   });
 }
 
-export const GET = withSession(handleGet);
-export const POST = withSession(handlePost);
-export const PUT = withSession(handlePut);
-export const PATCH = withSession(handlePatch);
-export const DELETE = withSession(handleDelete);
+export const GET = withSession(proxy('GET'));
+export const POST = withSession(proxy('POST'));
+export const PUT = withSession(proxy('PUT'));
+export const PATCH = withSession(proxy('PATCH'));
+export const DELETE = withSession(proxy('DELETE'));
