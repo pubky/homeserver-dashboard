@@ -5,22 +5,33 @@ import { Button } from '@/components/ui/button';
 import { ButtonSpinner } from '@/components/ui/button-spinner';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Copy, Check, QrCode, X, Gift, Plus, CircleCheckBig, RefreshCw } from 'lucide-react';
+import { Info, Copy, Check, X, CircleCheckBig, RefreshCw, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { usePolling } from '@/hooks/usePolling';
 import { QRCodeSVG } from 'qrcode.react';
+import {
+  QUOTA_FIELDS,
+  type QuotaText,
+  defaultText,
+  describeLimits,
+  emptyQuotaText,
+  quotaLimits,
+} from '@/lib/quota-form';
+import type { UserQuota } from '@/services/admin/admin.types';
 
-/** How often the signup-code stats are re-read while a QR is on screen. */
+/** How often the signup-code stats are re-read while a new invite is on screen. */
 const WATCH_POLL_MS = 3000;
 
-/** How long an open QR keeps polling before it stops on its own. */
+/** How long a shown invite keeps polling before it stops on its own. */
 const WATCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface InviteManagementProps {
-  invites: string[];
-  onGenerate: () => Promise<void>;
+  /** Creates an invite with the given limits (none = the homeserver's defaults) and returns its code. */
+  onGenerate: (limits: UserQuota) => Promise<string>;
   isGenerating?: boolean;
   /** Last invite-generation failure; rendered as an inline alert. */
   generateError?: string | null;
@@ -28,9 +39,16 @@ export interface InviteManagementProps {
   signupCodesUnused?: number;
   isStatsLoading?: boolean;
   homeserverPubkey?: string;
-  /** Background re-read of the signup-code stats, polled while a QR is open. */
+  /** Background re-read of the signup-code stats, polled while a new invite is shown. */
   onRefreshStats?: () => void | Promise<void>;
+  /** The homeserver's default limits (from its config.toml), shown in the empty fields; null when not readable. */
+  homeserverDefaults?: UserQuota | null;
+  /** Whether the page lists the homeserver's codes below this card; without the list a code cannot be shown again. */
+  codesListed?: boolean;
 }
+
+/** The invite just created, shown once: the homeserver does not display codes again. */
+type CreatedInvite = { token: string; limits: UserQuota };
 
 /** "Get Pubky Ring" assist, shown wherever the app is a prerequisite. */
 function PubkyRingAssist() {
@@ -51,7 +69,6 @@ function PubkyRingAssist() {
 }
 
 export function InviteManagement({
-  invites,
   onGenerate,
   isGenerating,
   generateError,
@@ -60,121 +77,101 @@ export function InviteManagement({
   isStatsLoading,
   homeserverPubkey,
   onRefreshStats,
+  homeserverDefaults,
+  codesListed,
 }: InviteManagementProps) {
   const { copiedKey, copy } = useCopyFeedback();
-  const [expandedInviteIndex, setExpandedInviteIndex] = useState<number | null>(null);
-  const [signupSeenWhileOpen, setSignupSeenWhileOpen] = useState<Set<string>>(() => new Set());
+  const [created, setCreated] = useState<CreatedInvite | null>(null);
+  const [limitsOpen, setLimitsOpen] = useState(false);
+  const [limitsText, setLimitsText] = useState<QuotaText>(emptyQuotaText);
+  const [limitsError, setLimitsError] = useState<string | null>(null);
+  const [sawSignup, setSawSignup] = useState(false);
   const [watchExpired, setWatchExpired] = useState(false);
-
-  // Auto-expand the QR for a freshly-created invite, but not for invites
-  // already present on first mount. useAdminActions prepends new tokens at
-  // index 0 (`[result.token, ...prev]`), so the new invite is invites[0].
-  const justCreatedRef = useRef(false);
-  useEffect(() => {
-    if (justCreatedRef.current && invites.length > 0) {
-      setExpandedInviteIndex(0);
-      justCreatedRef.current = false;
-    }
-  }, [invites.length]);
 
   const hasStats = typeof signupCodesTotal === 'number' && typeof signupCodesUnused === 'number';
   const totalGenerated = hasStats ? signupCodesTotal : undefined;
   const totalUnused = hasStats ? signupCodesUnused : undefined;
   const totalUsed = hasStats ? Math.max(0, signupCodesTotal - signupCodesUnused) : undefined;
 
-  const watchedInvite = expandedInviteIndex === null ? null : (invites[expandedInviteIndex] ?? null);
-  const isWatching = watchedInvite !== null && !watchExpired && !signupSeenWhileOpen.has(watchedInvite);
-
+  const isWatching = created !== null && !watchExpired && !sawSignup;
   usePolling(() => onRefreshStats?.(), WATCH_POLL_MS, { enabled: isWatching && Boolean(onRefreshStats) });
 
   // Give up on an unattended panel rather than polling the homeserver forever.
   useEffect(() => {
     setWatchExpired(false);
-    if (!watchedInvite) return;
+    if (!created) return;
     const timer = setTimeout(() => setWatchExpired(true), WATCH_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [watchedInvite]);
+  }, [created]);
 
   // A signup shows up as the used count going up. Watching "used" rather than
   // "unused" survives an invite being created in the same interval, which moves
-  // both other counters. Which code was spent is not knowable on the homeserver
-  // this app ships: its admin API reports totals only, so the panel reports the
-  // signup and never names the code. Newer homeservers expose per-code usage
-  // (`used_at`/`used_by`) on the signup_tokens admin endpoint; move this watch
-  // over to that, and drop the counting, once the app runs one.
+  // both other counters. The admin API reports totals only, so the panel
+  // reports the signup and never claims it was this code.
   const previousUsedRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const previousUsed = previousUsedRef.current;
     previousUsedRef.current = totalUsed;
     if (previousUsed === undefined || totalUsed === undefined) return;
-    if (totalUsed <= previousUsed || !watchedInvite) return;
-    setSignupSeenWhileOpen((current) => new Set(current).add(watchedInvite));
-  }, [totalUsed, watchedInvite]);
-
-  const handleCopy = async (invite: string, index: number) => {
-    // Copy failures (clipboard unavailable) are silent.
-    await copy(invite, `code-${index}`);
-  };
+    if (totalUsed <= previousUsed || !created) return;
+    setSawSignup(true);
+  }, [totalUsed, created]);
 
   // `direct_signup` registers the account on this homeserver straight away. The
   // plain `signup` intent is the relayed cookie flow and needs caps/relay/secret,
   // which an invite has none of.
-  const generateSignupUrl = (inviteCode: string): string | null => {
-    if (!homeserverPubkey) return null;
-    return `pubkyauth://direct_signup?hs=${encodeURIComponent(homeserverPubkey)}&st=${encodeURIComponent(inviteCode)}`;
+  const signupUrl =
+    created && homeserverPubkey
+      ? `pubkyauth://direct_signup?hs=${encodeURIComponent(homeserverPubkey)}&st=${encodeURIComponent(created.token)}`
+      : null;
+
+  const createdLimitLines = created ? describeLimits(created.limits) : [];
+
+  const handleCreate = async () => {
+    setLimitsError(null);
+    let limits: UserQuota = {};
+    if (limitsOpen) {
+      try {
+        limits = quotaLimits(limitsText);
+      } catch (error) {
+        setLimitsError(error instanceof Error ? error.message : 'Could not read the limits.');
+        return;
+      }
+    }
+    try {
+      const token = await onGenerate(limits);
+      setSawSignup(false);
+      setCreated({ token, limits });
+    } catch {
+      // Reported through generateError by the caller.
+    }
   };
 
-  const handleCopyUrl = async (inviteCode: string, index: number) => {
-    const url = generateSignupUrl(inviteCode);
-    if (!url) return;
-    await copy(url, `url-${index}`);
-  };
-
-  const handleGenerate = async () => {
-    justCreatedRef.current = true;
-    await onGenerate();
-  };
+  const copyButton = (value: string, key: string, label: string) => (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => void copy(value, key)}
+      className="h-8 w-8 shrink-0"
+      title={copiedKey === key ? 'Copied' : label}
+      aria-label={copiedKey === key ? `Copied: ${label}` : label}
+    >
+      {copiedKey === key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </Button>
+  );
 
   return (
     <Card>
       <CardHeader className="pb-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">Invite Management</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Create invite codes for new users. Statistics are shown below.
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            title="New invite"
-            aria-label="New invite"
-          >
-            {isGenerating ? <ButtonSpinner /> : <Plus className="h-4 w-4" />}
-          </Button>
-        </div>
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">Invite Management</CardTitle>
+        <CardDescription className="text-xs sm:text-sm">
+          Create invite codes for new users, with the homeserver&apos;s default limits or their own.
+        </CardDescription>
       </CardHeader>
 
       <div className="mx-6 h-px bg-border/60" />
 
       <CardContent className="space-y-6 pt-4">
-        {/* Generation failure: without this the spinner just stops and the
-            user is left wondering whether a code was created. */}
-        {generateError && (
-          <Alert variant="destructive" data-testid="invite-generate-error">
-            <AlertTitle>Could not create an invite</AlertTitle>
-            <AlertDescription className="text-xs">
-              <p className="break-words">{generateError}</p>
-              <p className="mt-1">
-                The homeserver may be busy or restarting. Wait a moment and try again; no code was created.
-              </p>
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* Invite Statistics */}
         <div>
           <div className="mb-3 flex items-center gap-2">
@@ -204,153 +201,161 @@ export function InviteManagement({
           </div>
         </div>
 
-        {/* Generated invites. Session-only by design: the homeserver does not
-            re-display codes, so the title and copy must not pretend this list
-            is the full history the stats above describe. */}
-        <div>
-          <h3 className="mb-1 text-sm font-medium text-foreground">Created this session</h3>
-          <p className="mb-3 text-xs text-muted-foreground/70">
-            Codes stay valid after a reload, but they cannot be displayed again. Share or save them while they are shown
-            here.
-          </p>
-          {invites.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-4 py-12 text-center">
-              <Gift className="mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="text-sm font-medium text-foreground">No invites created in this session yet.</p>
-              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Create an invite code to share with someone. They can use it in the Pubky Ring app to join this
-                homeserver.
+        {/* Create an invite, with or without limits of its own. */}
+        <div className="space-y-3" data-testid="invite-create-section">
+          <h3 className="text-sm font-medium text-foreground">Create invite</h3>
+
+          {generateError && !limitsError && (
+            <Alert variant="destructive" data-testid="invite-generate-error">
+              <AlertTitle>Could not create an invite</AlertTitle>
+              <AlertDescription className="text-xs">
+                <p className="break-words">{generateError}</p>
+                <p className="mt-1">
+                  No code was created. If limits were set, check them; otherwise the homeserver may be busy or
+                  restarting, so wait a moment and try again.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {limitsError && (
+            <Alert variant="destructive" data-testid="invite-limits-error">
+              <AlertTitle>Check the limits</AlertTitle>
+              <AlertDescription className="text-xs">{limitsError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void handleCreate()} disabled={isGenerating} size="sm" data-testid="invite-create">
+              {isGenerating ? <ButtonSpinner className="mr-2" /> : <Plus className="h-4 w-4" />}
+              {isGenerating ? 'Creating...' : 'Create invite'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLimitsOpen((open) => !open)}
+              aria-expanded={limitsOpen}
+              data-testid="invite-limits-toggle"
+            >
+              {limitsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {limitsOpen ? 'Hide limits' : 'Set limits for this invite'}
+            </Button>
+          </div>
+
+          {limitsOpen && (
+            <div className="space-y-4 rounded-lg border bg-muted/30 p-4" data-testid="invite-limits">
+              <p className="text-xs text-muted-foreground">
+                Whoever signs up with this invite gets these limits. Empty fields follow the homeserver&apos;s defaults.
               </p>
-              <div className="mt-2">
-                <PubkyRingAssist />
-              </div>
-              <Button onClick={handleGenerate} disabled={isGenerating} size="sm" className="mt-4">
-                {isGenerating ? (
-                  <>
-                    <ButtonSpinner className="mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  <>Create invite</>
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {invites.map((invite, index) => {
-                const signupUrl = generateSignupUrl(invite);
-                const isExpanded = expandedInviteIndex === index;
-                const sawSignup = signupSeenWhileOpen.has(invite);
-                return (
-                  <div key={index} className="rounded-lg border bg-muted/40 p-3 sm:p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        {invites.length > 1 && (
-                          <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                            Invite {index + 1}
-                          </span>
-                        )}
-                        <code className="font-mono text-xs break-all sm:text-sm sm:break-normal">{invite}</code>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button
-                          variant={copiedKey === `code-${index}` ? 'secondary' : 'ghost'}
-                          size="icon"
-                          onClick={() => handleCopy(invite, index)}
-                          className="h-8 w-8 shrink-0"
-                          title={copiedKey === `code-${index}` ? 'Copied' : 'Copy code'}
-                          aria-label={
-                            copiedKey === `code-${index}` ? 'Copied invite code' : `Copy invite code ${index + 1}`
-                          }
-                        >
-                          {copiedKey === `code-${index}` ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        </Button>
-                        {signupUrl && (
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setExpandedInviteIndex(isExpanded ? null : index)}
-                            className="h-8 w-8"
-                            title={isExpanded ? 'Hide QR Code' : 'Show QR Code'}
-                            aria-label={isExpanded ? 'Hide invite QR code' : 'Show invite QR code'}
-                          >
-                            {isExpanded ? <X className="h-4 w-4" /> : <QrCode className="h-4 w-4" />}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {isExpanded && signupUrl && sawSignup && (
-                      <div
-                        data-testid={`invite-signup-seen-${index}`}
-                        className="mt-4 animate-in rounded-lg border border-brand bg-brand/16 p-4 fade-in"
-                      >
-                        <div className="flex items-start gap-2">
-                          <CircleCheckBig className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground">Someone just joined</p>
-                            <p className="text-xs text-muted-foreground">
-                              An invite code was used while this QR was open. The homeserver only reports totals, so if
-                              it was this code, it will not work a second time.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Expanded QR Code / Signup URL Section */}
-                    {isExpanded && signupUrl && (
-                      <div className="mt-4 rounded-lg border bg-muted/30 p-4">
-                        <p className="mb-3 text-xs font-medium text-muted-foreground">
-                          Share invite - scan with Pubky Ring or copy the link
-                        </p>
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-                          <div className="flex shrink-0 flex-col items-center gap-2">
-                            <div className="rounded-lg border border-border bg-white p-3 shadow-sm">
-                              <QRCodeSVG value={signupUrl} size={160} level="M" />
-                            </div>
-                            <span className="text-xs text-muted-foreground">QR code</span>
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
-                              <code className="min-w-0 flex-1 font-mono text-xs break-all text-foreground">
-                                {signupUrl}
-                              </code>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleCopyUrl(invite, index)}
-                                className="h-8 w-8 shrink-0"
-                                title={copiedKey === `url-${index}` ? 'Copied' : 'Copy URL'}
-                                aria-label={
-                                  copiedKey === `url-${index}` ? 'Copied invite URL' : `Copy invite URL ${index + 1}`
-                                }
-                              >
-                                {copiedKey === `url-${index}` ? (
-                                  <Check className="h-4 w-4" />
-                                ) : (
-                                  <Copy className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </div>
-                            <p className="mt-2 text-xs text-muted-foreground/70">
-                              The <code>pubkyauth://</code> link only opens on a device with Pubky Ring installed.
-                            </p>
-                            <div className="mt-1">
-                              <PubkyRingAssist />
-                            </div>
-                            {isWatching && onRefreshStats && (
-                              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <RefreshCw className="h-3 w-3 animate-spin" /> Waiting for a signup…
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {QUOTA_FIELDS.map(({ key, label, hint }) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label htmlFor={`invite-${key}`}>{label}</Label>
+                    <Input
+                      id={`invite-${key}`}
+                      value={limitsText[key]}
+                      onChange={(event) => setLimitsText({ ...limitsText, [key]: event.target.value })}
+                      placeholder={
+                        homeserverDefaults
+                          ? `${defaultText(key, homeserverDefaults)} (homeserver default)`
+                          : 'homeserver default'
+                      }
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground/70">{hint}</p>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            </div>
+          )}
+
+          {created && (
+            <div className="rounded-lg border bg-muted/40 p-3 sm:p-4" data-testid="invite-created">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">New invite</span>
+                  <code
+                    className="font-mono text-xs break-all sm:text-sm sm:break-normal"
+                    data-testid="invite-created-code"
+                  >
+                    {created.token}
+                  </code>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {copyButton(created.token, 'code', 'Copy invite code')}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCreated(null)}
+                    className="h-8 w-8"
+                    title="Done with this invite"
+                    aria-label="Done with this invite"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <p className="mt-2 text-xs text-muted-foreground/70" data-testid="invite-limits-summary">
+                {createdLimitLines.length === 0
+                  ? "Limits: the homeserver's defaults."
+                  : `Limits: ${createdLimitLines.join('; ')}.`}{' '}
+                {codesListed
+                  ? 'The code stays valid after a reload and is listed under Invite codes below, but is shown with its QR code only now.'
+                  : 'The code stays valid after a reload, but it is shown only now: copy it before leaving this page.'}
+              </p>
+
+              {sawSignup && (
+                <div
+                  data-testid="invite-signup-seen"
+                  className="mt-4 animate-in rounded-lg border border-brand bg-brand/16 p-4 fade-in"
+                >
+                  <div className="flex items-start gap-2">
+                    <CircleCheckBig className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">Someone just joined</p>
+                      <p className="text-xs text-muted-foreground">
+                        An invite code was used while this one was on screen. The homeserver only reports totals, so if
+                        it was this code, it will not work a second time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {signupUrl && (
+                <div className="mt-4 rounded-lg border bg-muted/30 p-4">
+                  <p className="mb-3 text-xs font-medium text-muted-foreground">
+                    Share invite - scan with Pubky Ring or copy the link
+                  </p>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+                    <div className="flex shrink-0 flex-col items-center gap-2">
+                      <div className="rounded-lg border border-border bg-white p-3 shadow-sm">
+                        <QRCodeSVG value={signupUrl} size={160} level="M" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">QR code</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+                        <code className="min-w-0 flex-1 font-mono text-xs break-all text-foreground">{signupUrl}</code>
+                        {copyButton(signupUrl, 'url', 'Copy invite URL')}
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground/70">
+                        The <code>pubkyauth://</code> link only opens on a device with Pubky Ring installed.
+                      </p>
+                      <div className="mt-1">
+                        <PubkyRingAssist />
+                      </div>
+                      {isWatching && onRefreshStats && (
+                        <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <RefreshCw className="h-3 w-3 animate-spin" /> Waiting for a signup…
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

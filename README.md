@@ -10,7 +10,7 @@ The dashboard has 6 tabs:
 
 - **Overview**: Shows homeserver stats from `GET /info` including connection status, public key, addresses, version, and user/storage statistics
 - **Users**: Disable / enable a user by pubkey via `POST /users/{pubkey}/disable` and `POST /users/{pubkey}/enable`. The disabled-users list is fetched live from the `/users/disabled` admin endpoint.
-- **Invites**: Generate signup tokens via `GET /generate_signup_token` with QR code display for easy mobile app signup; view invite statistics (total generated, used, unused)
+- **Invites**: Create invite codes via `GET /generate_signup_token`, or with limits of their own (storage, rates, bursts, writable paths) via `POST /generate_signup_token`. A new code is shown once with a QR code for easy mobile app signup. View invite statistics (total generated, used, unused). On a homeserver that lists its codes (admin `GET /signup_tokens`), see every code it has issued: unused ones with a copy-code action, used ones showing when and by which pubky. Homeserver 0.17+ also reports each code's limits
 - **Files**: Full WebDAV file browser (list/read/write/delete/move/create directories) using the `/dav/*` endpoint (Basic Auth). Includes admin "Delete from path" for removing entries by path
 - **Logs**: Tails the homeserver's JSON-line log file (level filter, line count). Requires `HOMESERVER_LOG_PATH`; the tab shows as unavailable when it is not set
 - **API**: API Explorer for admin/client/metrics endpoints (manual requests)
