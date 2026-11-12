@@ -14,11 +14,6 @@ export type AdminInfoResponse = {
 
 export type DeleteUrlRequest = { path: string };
 export type DisableUserRequest = { pubkey: string };
-export type DisabledUser = { pubkey: string };
-export type DisabledUsersResponse = {
-  items: DisabledUser[];
-  next_cursor: string | null;
-};
 export type GenerateInviteResponse = { token: string };
 
 /** Admin `GET /signup_tokens`. Timestamps are UTC without a zone. */
@@ -37,8 +32,9 @@ export type SignupTokensResponse = {
 };
 
 /**
- * The limits an account can have: given to an invite
- * with `POST /generate_signup_token`, and set as the homeserver's defaults in
+ * The limits an account can have: given to an invite with
+ * `POST /generate_signup_token`, read and changed per user with
+ * `GET|PATCH /users/{pubkey}/quota`, and set as the homeserver's defaults in
  * its config. A missing field means the homeserver default.
  */
 export type UserQuota = {
@@ -49,4 +45,41 @@ export type UserQuota = {
   rate_write_burst?: number;
   /** Missing = writes anywhere; [] = read-only. */
   allowed_write_paths?: string[];
+};
+
+/**
+ * A user's limits: `overrides` has only what was set for this user, `effective`
+ * is what applies once the homeserver's defaults fill the rest, leaving out a
+ * field that resolves to no limit.
+ */
+export type UserQuotaResponse = {
+  effective: UserQuota;
+  overrides: UserQuota;
+};
+/** Fields sent are changed; null hands a field back to the homeserver default. */
+export type UserQuotaPatch = { [K in keyof UserQuota]?: UserQuota[K] | null };
+
+export type UserListState = 'all' | 'enabled' | 'disabled';
+export type UserSort = 'created_at' | 'used_bytes';
+
+/** An account as admin `GET /users` and `GET /users/{pubkey}` report it (homeserver 0.17+), with usage and limits. */
+export type AdminUser = {
+  /** The account's key, z-base-32 as the homeserver names it. */
+  pubky: string;
+  /** When the account was created: UTC without a zone. */
+  created_at: string;
+  disabled: boolean;
+  used_bytes: number;
+  quota: UserQuotaResponse;
+};
+export type UsersResponse = {
+  items: AdminUser[];
+  next_cursor: string | null;
+};
+export type UsersQuery = {
+  state?: UserListState;
+  sortBy?: UserSort;
+  reverse?: boolean;
+  limit?: number;
+  cursor?: string;
 };
