@@ -1,8 +1,9 @@
 /**
  * A form's quota fields: how a limit is shown as text, and how the text typed
- * into a field becomes a limit. An empty field means "homeserver default".
+ * into a field becomes a limit or a PATCH. An empty field means "homeserver
+ * default".
  */
-import type { UserQuota } from '@/services/admin/admin.types';
+import type { UserQuota, UserQuotaPatch } from '@/services/admin/admin.types';
 
 type QuotaField = keyof UserQuota;
 
@@ -32,6 +33,13 @@ function quotaValueText(key: QuotaField, value: UserQuota[QuotaField] | undefine
     return paths.length === 0 ? 'none' : paths.join(', ');
   }
   return String(value);
+}
+
+/** The form's fields for a user's overrides. */
+export function quotaText(overrides: UserQuota): QuotaText {
+  const text = {} as QuotaText;
+  for (const { key } of QUOTA_FIELDS) text[key] = quotaValueText(key, overrides[key]);
+  return text;
 }
 
 /** How an empty field reads, from the limits that apply when it is left empty. */
@@ -112,7 +120,20 @@ export function describeLimits(limits: UserQuota): string[] {
 
 /** The form's fields all empty: every limit at the homeserver default. */
 export function emptyQuotaText(): QuotaText {
-  const text = {} as QuotaText;
-  for (const { key } of QUOTA_FIELDS) text[key] = '';
-  return text;
+  return quotaText({});
+}
+
+/**
+ * The PATCH for the fields whose text changed since `loaded`; a cleared field
+ * becomes null, back to the homeserver default. Throws when a changed field
+ * cannot be read, or when nothing changed.
+ */
+export function quotaPatch(loaded: QuotaText, edited: QuotaText): UserQuotaPatch {
+  const patch: UserQuotaPatch = {};
+  for (const { key } of QUOTA_FIELDS) {
+    if (edited[key].trim() === loaded[key].trim()) continue;
+    (patch as Record<QuotaField, unknown>)[key] = parseField(key, edited[key]);
+  }
+  if (Object.keys(patch).length === 0) throw new Error('Nothing changed.');
+  return patch;
 }

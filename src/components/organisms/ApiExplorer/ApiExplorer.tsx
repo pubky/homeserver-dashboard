@@ -60,8 +60,8 @@ const ADMIN_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
-    path: '/users/disabled?limit=20',
-    description: 'List disabled users with cursor pagination',
+    path: '/users?limit=20',
+    description: 'List accounts with usage, status and limits (cursor pagination; state, sort_by, reverse)',
     server: 'admin',
     requiresAuth: true,
   },

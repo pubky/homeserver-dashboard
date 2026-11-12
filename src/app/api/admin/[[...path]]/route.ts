@@ -25,6 +25,11 @@ async function handlePut(request: NextRequest, { params }: RouteParams) {
   return proxyRequest(request, path ?? [], 'PUT');
 }
 
+async function handlePatch(request: NextRequest, { params }: RouteParams) {
+  const { path } = await params;
+  return proxyRequest(request, path ?? [], 'PATCH');
+}
+
 async function handleDelete(request: NextRequest, { params }: RouteParams) {
   const { path } = await params;
   return proxyRequest(request, path ?? [], 'DELETE');
@@ -60,4 +65,5 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
 export const GET = withSession(handleGet);
 export const POST = withSession(handlePost);
 export const PUT = withSession(handlePut);
+export const PATCH = withSession(handlePatch);
 export const DELETE = withSession(handleDelete);

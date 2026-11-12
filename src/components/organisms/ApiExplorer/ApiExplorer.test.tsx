@@ -5,7 +5,7 @@ import { ApiExplorer, resolveRequestUrl } from './ApiExplorer';
 describe('resolveRequestUrl', () => {
   it('routes admin endpoints through the admin proxy', () => {
     expect(resolveRequestUrl('admin', '/info')).toBe('/api/admin/info');
-    expect(resolveRequestUrl('admin', '/users/disabled?limit=20')).toBe('/api/admin/users/disabled?limit=20');
+    expect(resolveRequestUrl('admin', '/users?limit=20')).toBe('/api/admin/users?limit=20');
     expect(resolveRequestUrl('admin', '/')).toBe('/api/admin/');
   });
 

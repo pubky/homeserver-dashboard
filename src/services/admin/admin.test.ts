@@ -29,10 +29,46 @@ describe('AdminService', () => {
     expect((init.headers as Headers).get('content-type')).toBe('application/json');
   });
 
-  it('getDisabledUsers builds the limit/cursor query', async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ users: [] }), { status: 200, headers: jsonHeaders }));
-    await service.getDisabledUsers(5, 'abc');
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/disabled?limit=5&cursor=abc');
+  it('getUsers builds the state, sort and paging query', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: jsonHeaders }),
+    );
+    await service.getUsers({ limit: 10 });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users?limit=10');
+    await service.getUsers({ state: 'disabled', sortBy: 'used_bytes', reverse: true, limit: 10, cursor: 'abc' });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      '/api/admin/users?state=disabled&sort_by=used_bytes&reverse=true&limit=10&cursor=abc',
+    );
+  });
+
+  it('getUser reads one account', async () => {
+    const user = {
+      created_at: '2026-10-22T10:00:00',
+      disabled: false,
+      used_bytes: 12,
+      quota: { effective: {}, overrides: {} },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ pubky: 'pk1', ...user }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.getUser('pk1')).resolves.toEqual({ pubky: 'pk1', ...user });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1');
+  });
+
+  it('getUserQuota reads the quota route', async () => {
+    const body = { effective: { storage_quota_mb: 500 }, overrides: {} };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(body), { status: 200, headers: jsonHeaders }));
+    await expect(service.getUserQuota('pk1')).resolves.toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1/quota');
+  });
+
+  it('patchUserQuota sends the changed fields and treats an empty 200 as success', async () => {
+    fetchMock.mockResolvedValue(new Response('', { status: 200, headers: jsonHeaders }));
+    await expect(service.patchUserQuota('pk1', { storage_quota_mb: 10, rate_read: null })).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/admin/users/pk1/quota');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ storage_quota_mb: 10, rate_read: null });
   });
 
   it('generateInvite asks with GET by default and posts limits when given', async () => {
