@@ -1,12 +1,16 @@
 import {
-  DisabledUsersResponse,
   AdminInfoResponse,
+  AdminUser,
   DeleteUrlRequest,
   DisableUserRequest,
   GenerateInviteResponse,
   SignupTokenState,
   SignupTokensResponse,
   UserQuota,
+  UserQuotaPatch,
+  UserQuotaResponse,
+  UsersQuery,
+  UsersResponse,
 } from './admin.types';
 
 /**
@@ -30,7 +34,8 @@ export class AdminService {
 
   /**
    * Resolves with any 2xx response and leaves its body unread; throws on anything else.
-   * For calls the homeserver answers without JSON: disable/enable reply with a plain-text "Ok".
+   * For calls the homeserver answers without JSON: disable/enable reply with a plain-text "Ok",
+   * a quota PATCH with an empty body.
    */
   private async send(path: string, init?: RequestInit): Promise<Response> {
     // Always use API route - no need to check baseUrl
@@ -82,11 +87,29 @@ export class AdminService {
     return this.request<AdminInfoResponse>('/info');
   }
 
-  async getDisabledUsers(limit = 20, cursor?: string): Promise<DisabledUsersResponse> {
+  /** The homeserver's accounts, a page at a time (0.17+). */
+  async getUsers(query: UsersQuery): Promise<UsersResponse> {
     const params = new URLSearchParams();
-    params.set('limit', String(limit));
-    if (cursor) params.set('cursor', cursor);
-    return this.request<DisabledUsersResponse>(`/users/disabled?${params.toString()}`);
+    if (query.state) params.set('state', query.state);
+    if (query.sortBy) params.set('sort_by', query.sortBy);
+    if (query.reverse) params.set('reverse', 'true');
+    if (query.limit) params.set('limit', String(query.limit));
+    if (query.cursor) params.set('cursor', query.cursor);
+    return this.request<UsersResponse>(`/users?${params.toString()}`);
+  }
+
+  /** One account with its usage, status and limits (0.17+); 404 for an unknown pubky. */
+  async getUser(pubkey: string): Promise<AdminUser> {
+    return this.request<AdminUser>(`/users/${encodeURIComponent(pubkey)}`);
+  }
+
+  async getUserQuota(pubkey: string): Promise<UserQuotaResponse> {
+    return this.request<UserQuotaResponse>(`/users/${encodeURIComponent(pubkey)}/quota`);
+  }
+
+  /** Changes the fields in `patch`; a null field goes back to the homeserver default. */
+  async patchUserQuota(pubkey: string, patch: UserQuotaPatch): Promise<void> {
+    await this.send(`/users/${encodeURIComponent(pubkey)}/quota`, { method: 'PATCH', body: JSON.stringify(patch) });
   }
 
   /** The homeserver's invite codes in `state`, a page at a time, in the homeserver's order (by code). */

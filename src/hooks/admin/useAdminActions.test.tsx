@@ -75,7 +75,7 @@ describe('useAdminActions', () => {
     expect(result.current.isDeletingUrl).toBe(false);
   });
 
-  it('disableUser and enableUser hit their endpoints and track errors independently', async () => {
+  it('disableUser and enableUser hit their endpoints and pass a failure on', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
     const { result } = renderHook(() => useAdminActions());
 
@@ -83,7 +83,6 @@ describe('useAdminActions', () => {
       await result.current.disableUser('pk1');
     });
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1/disable');
-    expect(result.current.disableUserError).toBeNull();
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: 'User not disabled' }), { status: 409, headers: jsonHeaders }),
@@ -91,8 +90,6 @@ describe('useAdminActions', () => {
     await act(async () => {
       await expect(result.current.enableUser('pk1')).rejects.toThrow('User not disabled');
     });
-    expect(result.current.enableUserError?.message).toBe('User not disabled');
-    expect(result.current.disableUserError).toBeNull();
-    expect(result.current.isEnablingUser).toBe(false);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/admin/users/pk1/enable');
   });
 });
