@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { ButtonSpinner } from '@/components/ui/button-spinner';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, Copy, Check, X, CircleCheckBig, RefreshCw, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { Info, X, CircleCheckBig, RefreshCw, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { usePolling } from '@/hooks/usePolling';
 import { QRCodeSVG } from 'qrcode.react';
@@ -148,16 +149,7 @@ export function InviteManagement({
   };
 
   const copyButton = (value: string, key: string, label: string) => (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => void copy(value, key)}
-      className="h-8 w-8 shrink-0"
-      title={copiedKey === key ? 'Copied' : label}
-      aria-label={copiedKey === key ? `Copied: ${label}` : label}
-    >
-      {copiedKey === key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-    </Button>
+    <CopyButton label={label} copied={copiedKey === key} onCopy={() => void copy(value, key)} />
   );
 
   return (
