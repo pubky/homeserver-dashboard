@@ -3,6 +3,7 @@
  * into a field becomes a limit or a PATCH. An empty field means "homeserver
  * default".
  */
+import { formatStorageMb } from '@/lib/format';
 import type { UserQuota, UserQuotaPatch } from '@/services/admin/admin.types';
 
 type QuotaField = keyof UserQuota;
@@ -110,7 +111,7 @@ export function describeLimits(limits: UserQuota): string[] {
       const paths = value as string[];
       lines.push(paths.length === 0 ? `${label}: none (read-only)` : `${label}: ${paths.join(', ')}`);
     } else if (key === 'storage_quota_mb') {
-      lines.push(`Storage: ${value === 'unlimited' ? 'unlimited' : `${value} MB`}`);
+      lines.push(`Storage: ${formatStorageMb(limits.storage_quota_mb)}`);
     } else {
       lines.push(`${label}: ${value}`);
     }

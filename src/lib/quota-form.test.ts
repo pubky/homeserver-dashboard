@@ -104,6 +104,7 @@ describe('describeLimits', () => {
       'Storage: unlimited',
       'Writable paths: /pub/a/',
     ]);
+    expect(describeLimits({ storage_quota_mb: 2048 })).toEqual(['Storage: 2 GB']);
     expect(describeLimits({})).toEqual([]);
   });
 });
