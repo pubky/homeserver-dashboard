@@ -59,12 +59,29 @@ describe('AdminService', () => {
     await expect(service.getInfo()).rejects.toThrow('Request failed: 502');
   });
 
-  it('treats 204 as a void success', async () => {
+  it('disableUser posts to the disable endpoint', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await expect(service.disableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/admin/users/pk1/disable');
     expect(init.method).toBe('POST');
+  });
+
+  it('treats the homeserver\'s plain-text "Ok" as success (disable/enable answer that way)', async () => {
+    fetchMock.mockResolvedValue(new Response('Ok', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
+    await expect(service.disableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
+    await expect(service.enableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
+  });
+
+  it('disableUser and enableUser still fail on a non-2xx plain-text answer', async () => {
+    fetchMock.mockImplementation(async () => new Response('user not found', { status: 404 }));
+    await expect(service.disableUser({ pubkey: 'pk1' })).rejects.toThrow('user not found');
+    await expect(service.enableUser({ pubkey: 'pk1' })).rejects.toThrow('user not found');
+  });
+
+  it('still rejects a 2xx answer that is not JSON where JSON is expected', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>interstitial</html>', { status: 200 }));
+    await expect(service.getInfo()).rejects.toThrow();
   });
 
   it('enableUser posts to the enable endpoint', async () => {

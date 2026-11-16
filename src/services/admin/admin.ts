@@ -20,6 +20,16 @@ export class AdminService {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await this.send(path, init);
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  }
+
+  /**
+   * Resolves with any 2xx response and leaves its body unread; throws on anything else.
+   * For calls the homeserver answers without JSON: disable/enable reply with a plain-text "Ok".
+   */
+  private async send(path: string, init?: RequestInit): Promise<Response> {
     // Always use API route - no need to check baseUrl
     try {
       const headers = new Headers(init?.headers);
@@ -56,8 +66,7 @@ export class AdminService {
         throw this.createHttpError(message, res.status);
       }
 
-      if (res.status === 204) return undefined as T;
-      return (await res.json()) as T;
+      return res;
     } catch (error) {
       if (error instanceof Error) {
         throw error;
@@ -89,11 +98,11 @@ export class AdminService {
   }
 
   async disableUser(payload: DisableUserRequest): Promise<void> {
-    await this.request(`/users/${payload.pubkey}/disable`, { method: 'POST' });
+    await this.send(`/users/${payload.pubkey}/disable`, { method: 'POST' });
   }
 
   async enableUser(payload: DisableUserRequest): Promise<void> {
-    await this.request(`/users/${payload.pubkey}/enable`, { method: 'POST' });
+    await this.send(`/users/${payload.pubkey}/enable`, { method: 'POST' });
   }
 
   async deleteUrl(payload: DeleteUrlRequest): Promise<void> {
