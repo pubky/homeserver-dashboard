@@ -4,6 +4,9 @@ import {
   DeleteUrlRequest,
   DisableUserRequest,
   GenerateInviteResponse,
+  SignupTokenState,
+  SignupTokensResponse,
+  UserQuota,
 } from './admin.types';
 
 /**
@@ -86,9 +89,23 @@ export class AdminService {
     return this.request<DisabledUsersResponse>(`/users/disabled?${params.toString()}`);
   }
 
-  async generateInvite(): Promise<GenerateInviteResponse> {
-    // Use API route which handles token server-side
-    const res = await fetch(`${this.baseUrl}/generate_signup_token`, { cache: 'no-store' });
+  /** The homeserver's invite codes in `state`, a page at a time, in the homeserver's order (by code). */
+  async getSignupTokens(state: SignupTokenState, limit = 50, cursor?: string): Promise<SignupTokensResponse> {
+    const params = new URLSearchParams({ state, limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return this.request<SignupTokensResponse>(`/signup_tokens?${params.toString()}`);
+  }
+
+  /** A new invite code; with `limits`, one whose user gets those limits instead of the homeserver's defaults. */
+  async generateInvite(limits?: UserQuota): Promise<GenerateInviteResponse> {
+    // Its own API route, which turns the homeserver's plain-text code into JSON.
+    const withLimits = limits !== undefined && Object.keys(limits).length > 0;
+    const res = await fetch(`${this.baseUrl}/generate_signup_token`, {
+      cache: 'no-store',
+      ...(withLimits
+        ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(limits) }
+        : {}),
+    });
     if (!res.ok) {
       const error = await res.json().catch(() => ({ error: `Failed to generate invite: ${res.status}` }));
       throw new Error(error.error || `Failed to generate invite: ${res.status}`);

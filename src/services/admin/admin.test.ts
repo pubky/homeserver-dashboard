@@ -35,6 +35,42 @@ describe('AdminService', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/disabled?limit=5&cursor=abc');
   });
 
+  it('generateInvite asks with GET by default and posts limits when given', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ token: 'AAAA-BBBB' }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.generateInvite()).resolves.toEqual({ token: 'AAAA-BBBB' });
+    expect(fetchMock.mock.calls[0][1].method).toBeUndefined();
+    await service.generateInvite({});
+    expect(fetchMock.mock.calls[1][1].method).toBeUndefined();
+    await service.generateInvite({ storage_quota_mb: 500 });
+    const [url, init] = fetchMock.mock.calls[2];
+    expect(url).toBe('/api/admin/generate_signup_token');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ storage_quota_mb: 500 });
+  });
+
+  it("generateInvite surfaces the route's message", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ type: 'upstream_error', error: 'Invalid rate' }), {
+        status: 422,
+        headers: jsonHeaders,
+      }),
+    );
+    await expect(service.generateInvite({ rate_read: '10mb' })).rejects.toThrow('Invalid rate');
+  });
+
+  it('getSignupTokens passes state, limit and cursor', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.getSignupTokens('used', 20, 'AAAA-BBBB-CCCC')).resolves.toEqual({
+      items: [],
+      next_cursor: null,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/signup_tokens?state=used&limit=20&cursor=AAAA-BBBB-CCCC');
+  });
+
   it('surfaces the JSON error message and status on failure', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ error: 'Invalid admin password' }), { status: 401, headers: jsonHeaders }),
