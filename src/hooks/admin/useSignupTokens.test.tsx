@@ -73,6 +73,38 @@ describe('useSignupTokens', () => {
     expect(result.current.items).toEqual([]);
   });
 
+  it('stops on an empty page that still names a cursor', async () => {
+    fetchMock.mockImplementation(async () => json({ items: [], next_cursor: 'AAAA' }));
+    const { result } = renderHook(() => useSignupTokens('unused'));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.items).toEqual([]);
+    expect(result.current.isTruncated).toBe(false);
+  });
+
+  it('stops when the homeserver gives the same cursor again', async () => {
+    fetchMock.mockImplementation(async () =>
+      json({ items: [code('AAAA', '2026-10-01T10:00:00')], next_cursor: 'AAAA' }),
+    );
+    const { result } = renderHook(() => useSignupTokens('unused'));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads at most 5000 codes and says the list is cut short', async () => {
+    let pages = 0;
+    fetchMock.mockImplementation(async () => {
+      const page = pages++;
+      const items = Array.from({ length: 1000 }, (_, i) => code(`P${page}-${i}`, '2026-10-01T10:00:00'));
+      return json({ items, next_cursor: `P${page}-999` });
+    });
+    const { result } = renderHook(() => useSignupTokens('unused'));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(result.current.items).toHaveLength(5000);
+    expect(result.current.isTruncated).toBe(true);
+  });
+
   it('reports a failure', async () => {
     fetchMock.mockResolvedValue(new Response('db down', { status: 500 }));
     const { result } = renderHook(() => useSignupTokens('used'));

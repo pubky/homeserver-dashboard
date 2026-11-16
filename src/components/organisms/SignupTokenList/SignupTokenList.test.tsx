@@ -99,6 +99,23 @@ describe('SignupTokenList', () => {
     await waitFor(() => expect(screen.getByTestId('limits-not-reported')).toBeTruthy());
   });
 
+  it('says so when the homeserver has more codes than were read', async () => {
+    let pages = 0;
+    fetchMock.mockImplementation(async () => {
+      const page = pages++;
+      const items = Array.from({ length: 1000 }, (_, i) => ({ ...UNUSED, token: `P${page}-${i}` }));
+      return json({ items, next_cursor: `P${page}-999` });
+    });
+    render(<SignupTokenList />);
+    expect((await screen.findByTestId('codes-truncated')).textContent).toContain('more than 5000 unused codes');
+  });
+
+  it('says nothing of the kind for a list read in full', async () => {
+    render(<SignupTokenList />);
+    await screen.findByText(UNUSED.token);
+    expect(screen.queryByTestId('codes-truncated')).toBeNull();
+  });
+
   it('reloads when refreshKey changes', async () => {
     const { rerender } = render(<SignupTokenList refreshKey={0} />);
     await screen.findByText(UNUSED.token);

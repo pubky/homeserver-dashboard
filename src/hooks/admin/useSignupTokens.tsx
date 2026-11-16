@@ -19,6 +19,8 @@ const byNewest = (a: SignupToken, b: SignupToken) => lastChange(b).localeCompare
  */
 export function useSignupTokens(state: SignupTokenState, refreshKey = 0) {
   const [items, setItems] = useState<SignupToken[]>([]);
+  // The homeserver holds more codes than were read, so `items` is a part of them and not the newest part.
+  const [isTruncated, setIsTruncated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -33,17 +35,27 @@ export function useSignupTokens(state: SignupTokenState, refreshKey = 0) {
     try {
       const all: SignupToken[] = [];
       let cursor: string | undefined;
-      do {
+      let hitMaxCodes = false;
+      for (;;) {
         const page = await getService().getSignupTokens(state, PAGE_SIZE, cursor);
         all.push(...page.items);
-        cursor = page.next_cursor ?? undefined;
-      } while (cursor && all.length < MAX_CODES);
+        const nextCursor = page.next_cursor ?? undefined;
+        // An empty page, or a cursor that does not move, would be asked for again without end.
+        if (!nextCursor || page.items.length === 0 || nextCursor === cursor) break;
+        if (all.length >= MAX_CODES) {
+          hitMaxCodes = true;
+          break;
+        }
+        cursor = nextCursor;
+      }
       if (!current()) return;
       setItems(all.sort(byNewest));
+      setIsTruncated(hitMaxCodes);
     } catch (err) {
       if (!current()) return;
       // Not the codes of the state shown before.
       setItems([]);
+      setIsTruncated(false);
       setError(err instanceof Error ? err : new Error('Failed to load invite codes'));
     } finally {
       if (current()) setIsLoading(false);
@@ -58,5 +70,5 @@ export function useSignupTokens(state: SignupTokenState, refreshKey = 0) {
     };
   }, [load, refreshKey]);
 
-  return { items, isLoading, error, refetch: load };
+  return { items, isTruncated, isLoading, error, refetch: load };
 }

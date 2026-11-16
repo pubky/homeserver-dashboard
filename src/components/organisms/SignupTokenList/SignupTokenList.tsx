@@ -49,7 +49,7 @@ function TokenLimits({ quota }: { quota: UserQuota }) {
  */
 export function SignupTokenList({ refreshKey = 0 }: SignupTokenListProps) {
   const [filter, setFilter] = useState<SignupTokenState>('unused');
-  const { items, isLoading, error, refetch } = useSignupTokens(filter, refreshKey);
+  const { items, isTruncated, isLoading, error, refetch } = useSignupTokens(filter, refreshKey);
   const { copiedKey, copy } = useCopyFeedback();
   const [visible, setVisible] = useState(VISIBLE_STEP);
   const [limitsOpenFor, setLimitsOpenFor] = useState<string | null>(null);
@@ -160,6 +160,13 @@ export function SignupTokenList({ refreshKey = 0 }: SignupTokenListProps) {
             <AlertTitle>Could not load invite codes</AlertTitle>
             <AlertDescription className="text-xs">{error.message}</AlertDescription>
           </Alert>
+        )}
+
+        {!isLoading && isTruncated && (
+          <p className="text-xs text-amber-400" data-testid="codes-truncated">
+            This homeserver has more than {items.length} {filter} codes. Only {items.length} were read, and the newest
+            may not be among them.
+          </p>
         )}
 
         {!isLoading && items.length > 0 && !reportsLimits && (
