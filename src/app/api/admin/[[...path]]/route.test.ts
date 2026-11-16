@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET } from './route';
+import { GET, PATCH } from './route';
 
 describe('admin proxy route', () => {
   const originalEnv = { ...process.env };
@@ -49,6 +49,23 @@ describe('admin proxy route', () => {
     const [urlArg, initArg] = fetchMock.mock.calls[0];
     expect(String(urlArg)).toContain('/users?limit=20');
     expect((initArg as RequestInit).headers).toEqual(expect.objectContaining({ 'X-Admin-Password': 'secret-token' }));
+  });
+
+  it('passes a PATCH and its body through', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+    const request = new NextRequest('http://localhost:8080/api/admin/users/pk1/quota', {
+      method: 'PATCH',
+      body: JSON.stringify({ storage_quota_mb: 10 }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await PATCH(request, { params: Promise.resolve({ path: ['users', 'pk1', 'quota'] }) });
+
+    expect(response.status).toBe(200);
+    const [urlArg, initArg] = fetchMock.mock.calls[0];
+    expect(String(urlArg)).toContain('/users/pk1/quota');
+    expect((initArg as RequestInit).method).toBe('PATCH');
+    expect(new TextDecoder().decode((initArg as RequestInit).body as ArrayBuffer)).toBe('{"storage_quota_mb":10}');
   });
 
   it('maps abort failures to timeout errors', async () => {
