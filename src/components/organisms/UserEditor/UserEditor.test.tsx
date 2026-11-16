@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserEditor } from './UserEditor';
 
 const ALICE = 'whgxto9xtroaih7ict9chtuxh1xmbpmci5qd71jsen3ow3bscipy';
+const BOB = 'o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -134,7 +135,6 @@ describe('UserEditor', () => {
   });
 
   it('forgets a remembered status when another account is looked up', async () => {
-    const BOB = 'o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo';
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') return new Response('Ok', { status: 200 });
       return json(quota);
@@ -158,6 +158,42 @@ describe('UserEditor', () => {
     // Typing again shows nothing until the next look-up.
     fireEvent.change(screen.getByLabelText('User pubky'), { target: { value: 'pub' } });
     expect(screen.queryByTestId('user-access')).toBeNull();
+  });
+
+  it('drops the account as soon as another key is typed over it', async () => {
+    render(<UserEditor onDisableUser={noop} onEnableUser={noop} />);
+    await lookUp(ALICE);
+    await screen.findByTestId('user-editor-result');
+    fireEvent.change(screen.getByLabelText('User pubky'), { target: { value: BOB } });
+    expect(screen.queryByTestId('user-editor-result')).toBeNull();
+    expect(screen.queryByTestId('user-disable')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save allowance' })).toBeNull();
+  });
+
+  it('keeps the account while its own key is retyped with the pubky prefix', async () => {
+    render(<UserEditor onDisableUser={noop} onEnableUser={noop} />);
+    await lookUp(ALICE);
+    await screen.findByTestId('user-editor-result');
+    fireEvent.change(screen.getByLabelText('User pubky'), { target: { value: `pubky${ALICE}` } });
+    expect(screen.getByTestId('user-editor-result')).toBeTruthy();
+  });
+
+  it('does not open another account while an action on this one is running', async () => {
+    let finish: () => void = () => {};
+    const onDisable = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const { rerender } = render(<UserEditor onDisableUser={onDisable} onEnableUser={noop} />);
+    await lookUp(ALICE);
+    await screen.findByTestId('user-access');
+    fireEvent.click(screen.getByTestId('user-disable'));
+
+    rerender(<UserEditor openRequest={{ pubkey: BOB, nonce: 1 }} onDisableUser={onDisable} onEnableUser={noop} />);
+    expect((screen.getByLabelText('User pubky') as HTMLInputElement).value).toBe(ALICE);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes(BOB))).toBe(false);
+
+    finish();
+    await screen.findByText(/User disabled/);
+    expect(onDisable).toHaveBeenCalledWith(ALICE);
+    expect(screen.getByTestId('user-access-disabled')).toBeTruthy();
   });
 
   it('with the user routes, reads status and usage from the account and re-reads after an action', async () => {

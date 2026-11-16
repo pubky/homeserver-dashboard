@@ -52,7 +52,13 @@ export function UserEditor({ openRequest, onDisableUser, onEnableUser, hasUserRo
   const [input, setInput] = useState('');
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [edited, setEdited] = useState<QuotaText | null>(null);
-  const [busy, setBusy] = useState<Busy>(null);
+  const [busy, setBusyState] = useState<Busy>(null);
+  // The same, readable by the effect that opens a requested account without it running again on every change.
+  const busyRef = useRef<Busy>(null);
+  const setBusy = useCallback((next: Busy) => {
+    busyRef.current = next;
+    setBusyState(next);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [access, setAccess] = useState<AccessState>('unknown');
@@ -98,20 +104,25 @@ export function UserEditor({ openRequest, onDisableUser, onEnableUser, hasUserRo
         if (thisLookup === lookupId.current) setBusy(null);
       }
     },
-    [hasUserRoutes],
+    [hasUserRoutes, setBusy],
   );
 
   useEffect(() => {
     if (!openRequest) return;
+    // A save, disable or enable in flight belongs to the account on screen:
+    // opening another now would show its result against the wrong account.
+    // A lookup in flight is simply superseded.
+    if (busyRef.current !== null && busyRef.current !== 'lookup') return;
     setInput(openRequest.pubkey);
     void lookUp(openRequest.pubkey);
   }, [openRequest, lookUp]);
 
-  // Clearing the search bar clears the account with it: nothing of someone
-  // else's stays on screen once their key is gone.
+  // The account on screen is the one named in the search bar. Once the bar
+  // says anything else, cleared or another key typed over it, the account goes:
+  // Save, Disable and Enable never act on an account the bar no longer names.
   const handleInput = (value: string) => {
     setInput(value);
-    if (value.trim() === '' && loaded) {
+    if (loaded && bareKey(value) !== loaded.pubkey) {
       lookupId.current += 1;
       setLoaded(null);
       setEdited(null);
