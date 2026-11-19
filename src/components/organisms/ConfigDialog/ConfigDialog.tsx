@@ -703,9 +703,20 @@ export function ConfigDialog({ open, onOpenChange, writable = false, focusCloudf
                       )}
                     </Button>
                   </div>
-                  <p className="w-full text-xs text-muted-foreground/70">
-                    Use this to connect other admin tools (e.g. pubky-cli) to your homeserver. Do not change{' '}
-                    <code>admin_password</code> in config.toml; it would disconnect this dashboard.
+                  <p className="w-full text-xs text-muted-foreground/70" data-testid="admin-password-note">
+                    Use this to connect other admin tools (e.g. pubky-cli) to your homeserver.{' '}
+                    {platform === 'umbrel' ? (
+                      <>
+                        Do not change <code>admin_password</code> in config.toml; it would disconnect this dashboard.
+                      </>
+                    ) : (
+                      // Elsewhere the dashboard may be reading the password from this very file.
+                      <>
+                        If you change <code>admin_password</code> in config.toml, restart the homeserver so both use the
+                        new one. A dashboard that is given the password through <code>ADMIN_TOKEN</code> needs it
+                        changed there too.
+                      </>
+                    )}
                   </p>
                   {adminPasswordError && (
                     <p className="w-full text-xs text-destructive" data-testid="admin-password-error">

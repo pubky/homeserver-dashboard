@@ -21,6 +21,10 @@ permission change here can break the others.
   reveals the API tab.
 - Read env at request time, never at module scope. The image is built once and gets its env, such
   as `PLATFORM=umbrel`, only when it runs, so a value read at build time is frozen into the image.
+- The admin API's address and password come from `homeserverAdmin()` (`src/lib/server/homeserver-admin.ts`),
+  never from `process.env` directly: when `ADMIN_BASE_URL` or `ADMIN_TOKEN` is unset it reads the
+  homeserver's `config.toml`, which is how a dashboard next to a plain homeserver is configured. A set
+  variable always wins, so the Umbrel app, which sets both, never reads the file for this.
 - The login only exists when `DASHBOARD_PASSWORD` is set (the Umbrel app sets it). Unset, whoever
   can reach the port is an admin and can read the admin password; never bind it beyond loopback or
   suggest exposing it without an authenticating proxy in front.
@@ -47,6 +51,23 @@ runner where each spec boots its own `next dev` on a free port, plus a mock Clou
 - Specs must not run in parallel. Filter with `npm run e2e -- <name>`.
 - It is not in CI and takes about 4 minutes. Run it by hand before merging anything that touches the
   Cloudflare flows, the Overview status rows or `entrypoint.sh`.
+
+## The bundle
+
+Outside Docker the dashboard runs from `npm run bundle`: `.next/standalone` made self-contained by
+`scripts/bundle.mjs`, started with `node server.js`. The script copies in the same files the
+Dockerfile copies by hand (`public/`, `.next/static/`, `@synonymdev/pkarr`), so a file added to one
+belongs in the other.
+
+A release ships the bundle as a linux-amd64 archive with a Node.js binary inside
+(`scripts/release-archive.sh`), which is what the README tells people to download. The Node version
+and its tarball's checksum are pinned in that script; keep the version the one the Dockerfile's base
+image uses. Nothing in PR CI packs or starts an archive: `release.yml` runs
+`scripts/smoke-test-archive.sh` on it when a tag is pushed, before anything is attached.
+After changing either script, run both by hand (`npm run bundle`, then the two scripts).
+
+The archive's launcher listens on `DASHBOARD_HOST` / `DASHBOARD_PORT`, defaulting to loopback, and
+ignores `HOSTNAME`, which shells set to the machine's name; do not make it listen wider by default.
 
 ## The image
 
@@ -75,6 +96,7 @@ store's `docker-compose.yml`, and keep the dashboard working against it.
 
 1. Bump the version by hand in two places: `package.json` and a matching `## [x.y.z]` heading in
    `CHANGELOG.md`.
-2. Push a `v*.*.*` tag. That triggers the Docker Hub publish (`synonymsoft/homeserver-dashboard`).
+2. Push a `v*.*.*` tag. That triggers the Docker Hub publish (`synonymsoft/homeserver-dashboard`) and
+   `release.yml`, which attaches the release archive to the GitHub release, creating it if needed.
 3. Nothing reaches Umbrel users until `pubky/umbrel-app-store` pins the new image by digest and bumps
    its own app version. That repo's README documents its versioning scheme.

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { RouteError, errorResponse } from '@/lib/server/errors';
+import { homeserverAdmin } from '@/lib/server/homeserver-admin';
 import { getRequestId, logRouteError } from '@/lib/server/logger';
 import { proxyToUpstream } from '@/lib/server/upstream-proxy';
 import { withSession } from '@/lib/server/session';
@@ -19,8 +20,7 @@ const proxy =
   };
 
 async function proxyRequest(request: NextRequest, pathSegments: string[], method: string) {
-  const baseUrl = process.env.ADMIN_BASE_URL;
-  const token = process.env.ADMIN_TOKEN;
+  const { baseUrl, token } = await homeserverAdmin();
 
   if (!baseUrl || !token) {
     const requestId = getRequestId(request);

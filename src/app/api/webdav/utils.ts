@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RouteError, errorResponse, isAbortError } from '@/lib/server/errors';
+import { homeserverAdmin } from '@/lib/server/homeserver-admin';
 import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
@@ -79,8 +80,7 @@ export async function proxyWebDavRequest(
   const routeName = '/api/webdav/[...path]';
   const { path } = await paramsPromise;
 
-  const adminBaseUrl = process.env.ADMIN_BASE_URL || '';
-  const adminToken = process.env.ADMIN_TOKEN || '';
+  const { baseUrl: adminBaseUrl, token: adminToken } = await homeserverAdmin();
 
   if (!adminBaseUrl || !adminToken) {
     const error = new RouteError(500, 'config_error', 'WebDAV proxy is not configured');
