@@ -1,18 +1,14 @@
 import { useCallback, useState } from 'react';
 import { AdminService } from '@/services/admin/admin';
+import type { UserQuota } from '@/services/admin/admin.types';
 
 const getService = () => new AdminService();
 
 export function useAdminActions() {
   const [isDeletingUrl, setIsDeletingUrl] = useState(false);
-  const [isDisablingUser, setIsDisablingUser] = useState(false);
-  const [isEnablingUser, setIsEnablingUser] = useState(false);
   const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [deleteUrlError, setDeleteUrlError] = useState<Error | null>(null);
-  const [disableUserError, setDisableUserError] = useState<Error | null>(null);
-  const [enableUserError, setEnableUserError] = useState<Error | null>(null);
   const [generateInviteError, setGenerateInviteError] = useState<Error | null>(null);
-  const [generatedInvites, setGeneratedInvites] = useState<string[]>([]);
 
   const deleteUrl = useCallback(async (path: string) => {
     const service = getService();
@@ -30,46 +26,19 @@ export function useAdminActions() {
     }
   }, []);
 
-  const disableUser = useCallback(async (pubkey: string) => {
-    const service = getService();
-    setIsDisablingUser(true);
-    setDisableUserError(null);
+  const disableUser = useCallback((pubkey: string) => getService().disableUser({ pubkey }), []);
 
-    try {
-      await service.disableUser({ pubkey });
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to disable user');
-      setDisableUserError(error);
-      throw error;
-    } finally {
-      setIsDisablingUser(false);
-    }
-  }, []);
+  const enableUser = useCallback((pubkey: string) => getService().enableUser({ pubkey }), []);
 
-  const enableUser = useCallback(async (pubkey: string) => {
-    const service = getService();
-    setIsEnablingUser(true);
-    setEnableUserError(null);
-
-    try {
-      await service.enableUser({ pubkey });
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to enable user');
-      setEnableUserError(error);
-      throw error;
-    } finally {
-      setIsEnablingUser(false);
-    }
-  }, []);
-
-  const generateInvite = useCallback(async () => {
+  /** Creates an invite, with the homeserver's default limits or the given ones, and returns its code. */
+  const generateInvite = useCallback(async (limits?: UserQuota): Promise<string> => {
     const service = getService();
     setIsGeneratingInvite(true);
     setGenerateInviteError(null);
 
     try {
-      const result = await service.generateInvite();
-      setGeneratedInvites((prev) => [result.token, ...prev].slice(0, 10)); // Keep last 10
+      const result = await service.generateInvite(limits);
+      return result.token;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to generate invite');
       setGenerateInviteError(error);
@@ -85,13 +54,8 @@ export function useAdminActions() {
     enableUser,
     generateInvite,
     isDeletingUrl,
-    isDisablingUser,
-    isEnablingUser,
     isGeneratingInvite,
     deleteUrlError,
-    disableUserError,
-    enableUserError,
     generateInviteError,
-    generatedInvites,
   };
 }

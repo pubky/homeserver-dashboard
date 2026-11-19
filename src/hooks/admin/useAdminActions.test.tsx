@@ -15,41 +15,21 @@ describe('useAdminActions', () => {
     vi.restoreAllMocks();
   });
 
-  it('generateInvite prepends new invites and clears the busy flag', async () => {
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'INV-1' }), { status: 200, headers: jsonHeaders }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'INV-2' }), { status: 200, headers: jsonHeaders }));
+  it('generateInvite returns the new code and clears the busy flag', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ token: 'INV-1' }), { status: 200, headers: jsonHeaders }),
+    );
     const { result } = renderHook(() => useAdminActions());
 
+    let token = '';
     await act(async () => {
-      await result.current.generateInvite();
-    });
-    await act(async () => {
-      await result.current.generateInvite();
+      token = await result.current.generateInvite({ storage_quota_mb: 500 });
     });
 
-    expect(result.current.generatedInvites).toEqual(['INV-2', 'INV-1']);
+    expect(token).toBe('INV-1');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
     expect(result.current.isGeneratingInvite).toBe(false);
     expect(result.current.generateInviteError).toBeNull();
-  });
-
-  it('generateInvite keeps only the last 10 invites', async () => {
-    let n = 0;
-    fetchMock.mockImplementation(async () => {
-      n += 1;
-      return new Response(JSON.stringify({ token: `INV-${n}` }), { status: 200, headers: jsonHeaders });
-    });
-    const { result } = renderHook(() => useAdminActions());
-
-    for (let i = 0; i < 12; i++) {
-      await act(async () => {
-        await result.current.generateInvite();
-      });
-    }
-
-    expect(result.current.generatedInvites).toHaveLength(10);
-    expect(result.current.generatedInvites[0]).toBe('INV-12');
-    expect(result.current.generatedInvites[9]).toBe('INV-3');
   });
 
   it('generateInvite failure sets the error state and rethrows', async () => {
@@ -64,7 +44,6 @@ describe('useAdminActions', () => {
 
     expect(result.current.generateInviteError?.message).toBe('No invites left');
     expect(result.current.isGeneratingInvite).toBe(false);
-    expect(result.current.generatedInvites).toEqual([]);
   });
 
   it('deleteUrl proxies the path and resets the busy flag', async () => {
@@ -96,7 +75,7 @@ describe('useAdminActions', () => {
     expect(result.current.isDeletingUrl).toBe(false);
   });
 
-  it('disableUser and enableUser hit their endpoints and track errors independently', async () => {
+  it('disableUser and enableUser hit their endpoints and pass a failure on', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
     const { result } = renderHook(() => useAdminActions());
 
@@ -104,7 +83,6 @@ describe('useAdminActions', () => {
       await result.current.disableUser('pk1');
     });
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1/disable');
-    expect(result.current.disableUserError).toBeNull();
 
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: 'User not disabled' }), { status: 409, headers: jsonHeaders }),
@@ -112,8 +90,6 @@ describe('useAdminActions', () => {
     await act(async () => {
       await expect(result.current.enableUser('pk1')).rejects.toThrow('User not disabled');
     });
-    expect(result.current.enableUserError?.message).toBe('User not disabled');
-    expect(result.current.disableUserError).toBeNull();
-    expect(result.current.isEnablingUser).toBe(false);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/admin/users/pk1/enable');
   });
 });

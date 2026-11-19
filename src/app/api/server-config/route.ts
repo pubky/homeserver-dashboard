@@ -7,6 +7,7 @@ import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 import { restartAppSentence } from '@/lib/restart-copy';
 import { getPlatform } from '@/lib/server/platform';
 import { withSession } from '@/lib/server/session';
+import type { UserQuota } from '@/services/admin/admin.types';
 
 // Env is read lazily (call time, not module load), following the convention
 // in cloudflared-process.ts, so tests and multi-env deployments are never
@@ -41,6 +42,41 @@ function redactConfig(content: string): string {
       return line;
     })
     .join('\n');
+}
+
+/** The homeserver's default limits for new users, as far as config.toml sets them. */
+type DefaultQuota = Pick<UserQuota, 'rate_read' | 'rate_write' | 'rate_read_burst' | 'rate_write_burst'> & {
+  storage_quota_mb?: number;
+};
+
+/**
+ * Reads the default limits out of a config: `[storage].default_quota_mb` (or
+ * the older `[general].user_storage_quota_mb`, where 0 means no limit) and the
+ * `[default_quotas]` rates and bursts. A field the config does not set is
+ * undefined, so absent from the response: the homeserver then applies no limit
+ * (and a burst equal to its rate).
+ * An unreadable config gives null, not an error: the limits are a nicety, the
+ * config view is the point.
+ */
+function defaultQuotaOf(content: string): DefaultQuota | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseToml(content) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const table = (name: string) => (parsed[name] ?? {}) as Record<string, unknown>;
+  const number = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined);
+  const legacyStorage = number(table('general').user_storage_quota_mb) || undefined;
+  const quotas = table('default_quotas');
+  return {
+    storage_quota_mb: number(table('storage').default_quota_mb) ?? legacyStorage,
+    rate_read: text(quotas.rate_read),
+    rate_write: text(quotas.rate_write),
+    rate_read_burst: number(quotas.rate_read_burst),
+    rate_write_burst: number(quotas.rate_write_burst),
+  };
 }
 
 function computeChecksum(content: string): string {
@@ -174,6 +210,7 @@ async function handleGet() {
       });
       return NextResponse.json({
         config: redactConfig(raw),
+        defaultQuota: defaultQuotaOf(raw),
         checksum,
         mtime: stat.mtime.toISOString(),
         writable,

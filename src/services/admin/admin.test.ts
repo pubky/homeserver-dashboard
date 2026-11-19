@@ -29,10 +29,82 @@ describe('AdminService', () => {
     expect((init.headers as Headers).get('content-type')).toBe('application/json');
   });
 
-  it('getDisabledUsers builds the limit/cursor query', async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ users: [] }), { status: 200, headers: jsonHeaders }));
-    await service.getDisabledUsers(5, 'abc');
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/disabled?limit=5&cursor=abc');
+  it('getUsers builds the state, sort and paging query', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: jsonHeaders }),
+    );
+    await service.getUsers({ limit: 10 });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users?limit=10');
+    await service.getUsers({ state: 'disabled', sortBy: 'used_bytes', reverse: true, limit: 10, cursor: 'abc' });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      '/api/admin/users?state=disabled&sort_by=used_bytes&reverse=true&limit=10&cursor=abc',
+    );
+  });
+
+  it('getUser reads one account', async () => {
+    const user = {
+      created_at: '2026-10-22T10:00:00',
+      disabled: false,
+      used_bytes: 12,
+      quota: { effective: {}, overrides: {} },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ pubky: 'pk1', ...user }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.getUser('pk1')).resolves.toEqual({ pubky: 'pk1', ...user });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1');
+  });
+
+  it('getUserQuota reads the quota route', async () => {
+    const body = { effective: { storage_quota_mb: 500 }, overrides: {} };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(body), { status: 200, headers: jsonHeaders }));
+    await expect(service.getUserQuota('pk1')).resolves.toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/users/pk1/quota');
+  });
+
+  it('patchUserQuota sends the changed fields and treats an empty 200 as success', async () => {
+    fetchMock.mockResolvedValue(new Response('', { status: 200, headers: jsonHeaders }));
+    await expect(service.patchUserQuota('pk1', { storage_quota_mb: 10, rate_read: null })).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/admin/users/pk1/quota');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ storage_quota_mb: 10, rate_read: null });
+  });
+
+  it('generateInvite asks with GET by default and posts limits when given', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ token: 'AAAA-BBBB' }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.generateInvite()).resolves.toEqual({ token: 'AAAA-BBBB' });
+    expect(fetchMock.mock.calls[0][1].method).toBeUndefined();
+    await service.generateInvite({});
+    expect(fetchMock.mock.calls[1][1].method).toBeUndefined();
+    await service.generateInvite({ storage_quota_mb: 500 });
+    const [url, init] = fetchMock.mock.calls[2];
+    expect(url).toBe('/api/admin/generate_signup_token');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ storage_quota_mb: 500 });
+  });
+
+  it("generateInvite surfaces the route's message", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ type: 'upstream_error', error: 'Invalid rate' }), {
+        status: 422,
+        headers: jsonHeaders,
+      }),
+    );
+    await expect(service.generateInvite({ rate_read: '10mb' })).rejects.toThrow('Invalid rate');
+  });
+
+  it('getSignupTokens passes state, limit and cursor', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200, headers: jsonHeaders }),
+    );
+    await expect(service.getSignupTokens('used', 20, 'AAAA-BBBB-CCCC')).resolves.toEqual({
+      items: [],
+      next_cursor: null,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/signup_tokens?state=used&limit=20&cursor=AAAA-BBBB-CCCC');
   });
 
   it('surfaces the JSON error message and status on failure', async () => {
@@ -59,12 +131,29 @@ describe('AdminService', () => {
     await expect(service.getInfo()).rejects.toThrow('Request failed: 502');
   });
 
-  it('treats 204 as a void success', async () => {
+  it('disableUser posts to the disable endpoint', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await expect(service.disableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/admin/users/pk1/disable');
     expect(init.method).toBe('POST');
+  });
+
+  it('treats the homeserver\'s plain-text "Ok" as success (disable/enable answer that way)', async () => {
+    fetchMock.mockResolvedValue(new Response('Ok', { status: 200, headers: { 'Content-Type': 'text/plain' } }));
+    await expect(service.disableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
+    await expect(service.enableUser({ pubkey: 'pk1' })).resolves.toBeUndefined();
+  });
+
+  it('disableUser and enableUser still fail on a non-2xx plain-text answer', async () => {
+    fetchMock.mockImplementation(async () => new Response('user not found', { status: 404 }));
+    await expect(service.disableUser({ pubkey: 'pk1' })).rejects.toThrow('user not found');
+    await expect(service.enableUser({ pubkey: 'pk1' })).rejects.toThrow('user not found');
+  });
+
+  it('still rejects a 2xx answer that is not JSON where JSON is expected', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>interstitial</html>', { status: 200 }));
+    await expect(service.getInfo()).rejects.toThrow();
   });
 
   it('enableUser posts to the enable endpoint', async () => {

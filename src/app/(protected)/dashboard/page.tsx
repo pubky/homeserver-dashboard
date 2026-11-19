@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAdminInfo, useAdminActions, useDisabledUsers } from '@/hooks/admin';
+import { useAdminInfo, useAdminActions } from '@/hooks/admin';
 import { usePlatform } from '@/components/providers/PlatformProvider';
 import { DashboardNavbar } from '@/components/organisms/DashboardNavbar';
 import { DashboardOverview, useSetupGuideDismissal } from '@/components/organisms/DashboardOverview';
 import { ApiExplorer } from '@/components/organisms/ApiExplorer';
 import { FileBrowser } from '@/components/organisms/FileBrowser';
-import { DisabledUsersManagement } from '@/components/organisms/DisabledUsersManagement';
 import { ConfigDialog } from '@/components/organisms/ConfigDialog';
 import { InviteManagement } from '@/components/organisms/InviteManagement';
 import { DashboardLogs } from '@/components/organisms/DashboardLogs';
+import { SignupTokenList } from '@/components/organisms/SignupTokenList';
+import { UserEditor } from '@/components/organisms/UserEditor';
+import { UserList } from '@/components/organisms/UserList';
+import type { UserQuota } from '@/services/admin/admin.types';
 import {
   Github,
   BookOpen,
@@ -40,6 +43,19 @@ type TabAvailability = 'unknown' | 'available' | 'unavailable';
 
 const downgrade = (prev: TabAvailability): TabAvailability => (prev === 'unknown' ? 'unknown' : 'unavailable');
 
+/**
+ * Any well-formed pubky works for probing the per-user quota route: a missing
+ * user is a 404 with a body ("Not Found"), a homeserver without the route
+ * answers an empty 404. This is the pubky-testnet homeserver's key, which is
+ * never a user on a real homeserver.
+ */
+const QUOTA_PROBE_PUBKY = '8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo';
+
+async function hasQuotaRoute(response: Response): Promise<boolean> {
+  if (response.ok || response.status === 400) return true;
+  return response.status === 404 && (await response.text()).trim() !== '';
+}
+
 function TabUnavailableNotice() {
   return (
     <p
@@ -60,26 +76,7 @@ export default function DashboardPage() {
     refetch: refetchInfo,
     refresh: refreshInfo,
   } = useAdminInfo();
-  const {
-    disableUser,
-    enableUser,
-    generateInvite,
-    isGeneratingInvite,
-    isDisablingUser,
-    isEnablingUser,
-    generateInviteError,
-    generatedInvites,
-  } = useAdminActions();
-  const {
-    items: disabledUsers,
-    nextCursor,
-    isLoading: isLoadingDisabledUsers,
-    isLoadingMore: isLoadingMoreDisabledUsers,
-    error: disabledUsersError,
-    refetch: refetchDisabledUsers,
-    loadMore: loadMoreDisabledUsers,
-    removeDisabledUserLocally,
-  } = useDisabledUsers();
+  const { disableUser, enableUser, generateInvite, isGeneratingInvite, generateInviteError } = useAdminActions();
 
   // Controlled tabs: the get-started checklist's "Open Invites" CTA and the
   // footer's "Setup guide" link both need to drive the active tab.
@@ -100,8 +97,19 @@ export default function DashboardPage() {
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [canOpenSettings, setCanOpenSettings] = useState(true);
   const [logsTab, setLogsTab] = useState<TabAvailability>('unknown');
-  const [usersTab, setUsersTab] = useState<TabAvailability>('unknown');
+  // The user list on the Users tab needs the admin listing route (homeserver 0.17+).
+  const [userListAvailability, setUserListAvailability] = useState<TabAvailability>('unknown');
+  const [usersRefreshKey, setUsersRefreshKey] = useState(0);
+  // "Manage" on a listed account: open it in the editor below the list.
+  const [userToOpen, setUserToOpen] = useState<{ pubkey: string; nonce: number } | null>(null);
+  // The user editor on the Users tab needs the per-user quota route.
+  const [userEditorAvailability, setUserEditorAvailability] = useState<TabAvailability>('unknown');
+  // The invite code list on the Invites tab needs the homeserver's admin listing route.
+  const [hasSignupTokenList, setHasSignupTokenList] = useState(false);
+  const [signupTokensRefreshKey, setSignupTokensRefreshKey] = useState(0);
   const [configWritable, setConfigWritable] = useState(false);
+  // The homeserver's default limits, from config.toml when the dashboard can read it; null when it cannot.
+  const [homeserverDefaults, setHomeserverDefaults] = useState<UserQuota | null>(null);
 
   const handleSettingsClick = useCallback(() => {
     setIsConfigDialogOpen(true);
@@ -125,36 +133,51 @@ export default function DashboardPage() {
     if (!open) setCloudflareRefreshKey((n) => n + 1);
   }, []);
 
-  const handleGenerateInvite = useCallback(async () => {
-    // The failure is surfaced via generateInviteError; swallowing the throw
-    // here keeps it out of the console as an unhandled rejection.
-    try {
-      await generateInvite();
-    } catch {
-      return;
-    }
+  const handleGenerateInvite = useCallback(
+    async (limits?: UserQuota) => {
+      // The failure is surfaced via generateInviteError; the throw is passed on
+      // so the card knows nothing was created. The new code is not held back
+      // for the stats to be read again.
+      const token = await generateInvite(limits);
+      setSignupTokensRefreshKey((n) => n + 1);
+      void refetchInfo();
+      return token;
+    },
+    [generateInvite, refetchInfo],
+  );
+
+  // After either action, also one that failed part-way, the list and the
+  // stats are read again: the account may have changed all the same.
+  const refreshUsers = useCallback(async () => {
+    setUsersRefreshKey((n) => n + 1);
     await refetchInfo();
-  }, [generateInvite, refetchInfo]);
+  }, [refetchInfo]);
 
   const handleDisableUser = useCallback(
     async (pubkey: string) => {
-      await disableUser(pubkey);
-      await Promise.all([refetchInfo(), refetchDisabledUsers()]);
+      try {
+        await disableUser(pubkey);
+      } finally {
+        await refreshUsers();
+      }
     },
-    [disableUser, refetchDisabledUsers, refetchInfo],
+    [disableUser, refreshUsers],
   );
 
   const handleEnableUser = useCallback(
     async (pubkey: string) => {
-      removeDisabledUserLocally(pubkey);
       try {
         await enableUser(pubkey);
       } finally {
-        await Promise.all([refetchInfo(), refetchDisabledUsers()]);
+        await refreshUsers();
       }
     },
-    [enableUser, refetchDisabledUsers, refetchInfo, removeDisabledUserLocally],
+    [enableUser, refreshUsers],
   );
+
+  const handleManageUser = useCallback((pubkey: string) => {
+    setUserToOpen((prev) => ({ pubkey, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
 
   // Probing while the homeserver is still booting reports everything as
   // missing; once /info recovers from an error, probe again so tabs come
@@ -180,16 +203,23 @@ export default function DashboardPage() {
     //   - /api/server-config - 2xx means readable; body's `writable` flag drives edit affordance
     //   - /api/cloudflare-config - body's `supported` flag drives the Cloudflare tab
     //   - /api/logs - 2xx means the log file is readable, drives the Logs tab
-    //   - /api/admin/users/disabled - 2xx means the homeserver exposes the
-    //     disabled-users listing endpoint (pubky-homeserver PR #327); drives the Users tab
+    //   - /api/admin/users - 2xx means the homeserver lists its accounts
+    //     (0.17+); drives the user list on the Users tab
+    //   - /api/admin/users/{pubky}/quota - the per-user quota route; drives the
+    //     user editor, which also shows the Users tab
+    //   - /api/admin/signup_tokens - 2xx means the homeserver lists its invite
+    //     codes; drives the code list on the Invites tab
     const detectAvailability = async () => {
       try {
-        const [configRes, cloudflareRes, logsRes, disabledUsersRes] = await Promise.all([
+        const [configRes, cloudflareRes, logsRes, usersRes, signupTokensRes, quotaRes] = await Promise.all([
           fetch('/api/server-config'),
           fetch('/api/cloudflare-config'),
           fetch('/api/logs?lines=0'),
-          fetch('/api/admin/users/disabled?limit=1'),
+          fetch('/api/admin/users?limit=1'),
+          fetch('/api/admin/signup_tokens?limit=1'),
+          fetch(`/api/admin/users/${QUOTA_PROBE_PUBKY}/quota`),
         ]);
+        const isQuotaSupported = await hasQuotaRoute(quotaRes);
 
         let isCloudflareSupported = false;
         if (cloudflareRes.ok) {
@@ -202,23 +232,30 @@ export default function DashboardPage() {
         }
 
         let isConfigWritable = false;
+        let defaults: UserQuota | null = null;
         if (configRes.ok) {
-          const configData = (await configRes.json()) as { writable?: boolean };
+          const configData = (await configRes.json()) as { writable?: boolean; defaultQuota?: UserQuota };
           isConfigWritable = Boolean(configData.writable);
+          defaults = configData.defaultQuota ?? null;
         }
 
         if (!cancelled) {
           setCanOpenSettings(configRes.ok || isCloudflareSupported);
           setConfigWritable(isConfigWritable);
+          setHomeserverDefaults(defaults);
           setLogsTab((prev) => (logsRes.ok ? 'available' : downgrade(prev)));
-          setUsersTab((prev) => (disabledUsersRes.ok ? 'available' : downgrade(prev)));
+          setUserListAvailability((prev) => (usersRes.ok ? 'available' : downgrade(prev)));
+          setUserEditorAvailability((prev) => (isQuotaSupported ? 'available' : downgrade(prev)));
+          setHasSignupTokenList(signupTokensRes.ok);
         }
       } catch {
         // Keep settings button visible when detection fails to avoid blocking access.
         if (!cancelled) {
           setCanOpenSettings(true);
           setLogsTab(downgrade);
-          setUsersTab(downgrade);
+          setUserListAvailability(downgrade);
+          setUserEditorAvailability(downgrade);
+          setHasSignupTokenList(false);
         }
       }
     };
@@ -234,8 +271,10 @@ export default function DashboardPage() {
   // don't see it. Base tabs (Overview, Invites, Files) are always present;
   // Users/Logs/API are optional, so the column count is 3 + however many show.
   const apiExplorerEnabled = process.env.NEXT_PUBLIC_API_EXPLORER === 'true';
-  const optionalTabCount =
-    (usersTab !== 'unknown' ? 1 : 0) + (logsTab !== 'unknown' ? 1 : 0) + (apiExplorerEnabled ? 1 : 0);
+  // The Users tab shows for either of its parts: the list (users route) or
+  // the editor (quota route).
+  const showUsersTab = userListAvailability !== 'unknown' || userEditorAvailability !== 'unknown';
+  const optionalTabCount = (showUsersTab ? 1 : 0) + (logsTab !== 'unknown' ? 1 : 0) + (apiExplorerEnabled ? 1 : 0);
   const tabColsClass =
     optionalTabCount >= 3
       ? 'md:grid-cols-6'
@@ -260,7 +299,7 @@ export default function DashboardPage() {
                 <Home className="shrink-0" />
                 Overview
               </TabsTrigger>
-              {usersTab !== 'unknown' && (
+              {showUsersTab && (
                 <TabsTrigger
                   value="users"
                   className="shrink-0 gap-2 text-xs sm:text-sm [&_svg]:size-4"
@@ -314,32 +353,27 @@ export default function DashboardPage() {
               />
             </TabsContent>
 
-            {usersTab !== 'unknown' && (
+            {showUsersTab && (
               <TabsContent value="users" className="space-y-4">
-                {usersTab === 'unavailable' ? (
-                  <TabUnavailableNotice />
-                ) : (
-                  <DisabledUsersManagement
+                {userListAvailability === 'available' && (
+                  <UserList numUsers={info?.num_users} refreshKey={usersRefreshKey} onManage={handleManageUser} />
+                )}
+                {userEditorAvailability === 'available' && (
+                  <UserEditor
+                    openRequest={userToOpen}
                     onDisableUser={handleDisableUser}
                     onEnableUser={handleEnableUser}
-                    isDisablingUser={isDisablingUser || isEnablingUser}
-                    numUsersTotal={info?.num_users}
-                    numDisabledUsers={info?.num_disabled_users}
-                    disabledUsers={disabledUsers}
-                    isLoadingDisabledUsers={isLoadingDisabledUsers}
-                    isLoadingMoreDisabledUsers={isLoadingMoreDisabledUsers}
-                    hasMoreDisabledUsers={Boolean(nextCursor)}
-                    onLoadMoreDisabledUsers={loadMoreDisabledUsers}
-                    onRefreshDisabledUsers={refetchDisabledUsers}
-                    disabledUsersError={disabledUsersError?.message ?? null}
+                    hasUserRoutes={userListAvailability === 'available'}
                   />
+                )}
+                {userListAvailability !== 'available' && userEditorAvailability !== 'available' && (
+                  <TabUnavailableNotice />
                 )}
               </TabsContent>
             )}
 
             <TabsContent value="invites" className="space-y-4">
               <InviteManagement
-                invites={generatedInvites}
                 onGenerate={handleGenerateInvite}
                 isGenerating={isGeneratingInvite}
                 generateError={generateInviteError?.message ?? null}
@@ -348,7 +382,10 @@ export default function DashboardPage() {
                 isStatsLoading={infoLoading}
                 homeserverPubkey={info?.public_key ?? info?.pubkey}
                 onRefreshStats={refreshInfo}
+                homeserverDefaults={homeserverDefaults}
+                codesListed={hasSignupTokenList}
               />
+              {hasSignupTokenList && <SignupTokenList refreshKey={signupTokensRefreshKey} />}
             </TabsContent>
 
             <TabsContent value="files" className="space-y-4">

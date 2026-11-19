@@ -6,7 +6,9 @@ import { withSession } from '@/lib/server/session';
 const ROUTE_NAME = '/api/admin/generate_signup_token';
 const UPSTREAM_TIMEOUT_MS = 8000;
 
-async function handleGet(request: NextRequest) {
+/** GET creates an invite with the homeserver's default limits; POST passes a JSON body of limits through. */
+async function handle(request: NextRequest) {
+  const method = request.method === 'POST' ? 'POST' : 'GET';
   const requestId = getRequestId(request);
   const startedAt = Date.now();
   const baseUrl = process.env.ADMIN_BASE_URL;
@@ -17,7 +19,7 @@ async function handleGet(request: NextRequest) {
     logRouteError({
       requestId,
       route: ROUTE_NAME,
-      method: 'GET',
+      method,
       statusCode: error.status,
       durationMs: Date.now() - startedAt,
       errorType: error.type,
@@ -28,19 +30,23 @@ async function handleGet(request: NextRequest) {
 
   try {
     const response = await fetch(`${baseUrl}/generate_signup_token`, {
-      method: 'GET',
+      method,
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       headers: {
         'X-Admin-Password': token,
+        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
       },
+      body: method === 'POST' ? await request.text() : undefined,
     });
 
     if (!response.ok) {
-      const error = new RouteError(response.status, 'upstream_error', 'Failed to generate invite token');
+      // A 4xx names what was wrong with the limits (e.g. an unreadable rate); say so.
+      const reason = response.status < 500 ? (await response.text().catch(() => '')).trim().slice(0, 200) : '';
+      const error = new RouteError(response.status, 'upstream_error', reason || 'Failed to generate invite token');
       logRouteError({
         requestId,
         route: ROUTE_NAME,
-        method: 'GET',
+        method,
         statusCode: error.status,
         durationMs: Date.now() - startedAt,
         errorType: error.type,
@@ -53,7 +59,7 @@ async function handleGet(request: NextRequest) {
     logRouteInfo({
       requestId,
       route: ROUTE_NAME,
-      method: 'GET',
+      method,
       statusCode: 200,
       durationMs: Date.now() - startedAt,
       message: 'Invite token generated',
@@ -66,7 +72,7 @@ async function handleGet(request: NextRequest) {
     logRouteError({
       requestId,
       route: ROUTE_NAME,
-      method: 'GET',
+      method,
       statusCode: mapped.status,
       durationMs: Date.now() - startedAt,
       errorType: mapped.type,
@@ -76,4 +82,5 @@ async function handleGet(request: NextRequest) {
   }
 }
 
-export const GET = withSession(handleGet);
+export const GET = withSession(handle);
+export const POST = withSession(handle);
