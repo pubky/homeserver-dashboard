@@ -75,9 +75,9 @@ function domainHostname(pkarrIcannDomain: string | undefined): string | null {
   return hostname;
 }
 
-/** Connection failure explained for the operator first (on Umbrel there is no
- * .env.local to fix); the env-var checklist only matters to developers and
- * lives behind a collapsed disclosure. */
+/** Connection failure explained for the operator first (on Umbrel there is
+ * nothing for them to configure); the settings checklist only matters to
+ * whoever set the dashboard up and lives behind a collapsed disclosure. */
 function ConnectionErrorAlert({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const restartSentence = useRestartSentence();
   return (
@@ -103,8 +103,8 @@ function ConnectionErrorAlert({ message, onRetry }: { message: string; onRetry?:
           <summary className="cursor-pointer font-medium">Developer details</summary>
           <p className="mt-1 break-words">{message}</p>
           <ul className="mt-1 list-inside list-disc space-y-0.5">
-            <li>Missing or incorrect ADMIN_BASE_URL in .env.local</li>
-            <li>Missing or incorrect ADMIN_TOKEN in .env.local</li>
+            <li>Missing or incorrect ADMIN_BASE_URL or ADMIN_TOKEN</li>
+            <li>Without those: HOMESERVER_CONFIG_PATH does not point at a config.toml the dashboard can read</li>
             <li>Homeserver is not running or unreachable</li>
           </ul>
         </details>
