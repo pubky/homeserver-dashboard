@@ -84,46 +84,19 @@ describe('webdav proxy utils', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it.each([['MOVE'], ['COPY']])(
-    'rewrites the %s Destination header from the proxy path to the upstream /dav URL',
-    async (davMethod) => {
-      const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 201 }));
-      const request = new NextRequest('http://localhost:8080/api/webdav/pk1/pub/old.txt', {
-        method: 'POST',
-        headers: {
-          'X-HTTP-Method-Override': davMethod,
-          Destination: '/api/webdav/pk1/pub/new.txt',
-        },
-      });
-
-      const response = await proxyWebDavRequest(request, Promise.resolve({ path: ['pk1', 'pub', 'old.txt'] }), 'POST');
-
-      expect(response.status).toBe(201);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0];
-      expect(String(url)).toBe('http://homeserver:6286/dav/pk1/pub/old.txt');
-      expect(init?.method).toBe(davMethod);
-      const headers = new Headers(init?.headers as HeadersInit);
-      expect(headers.get('Destination')).toBe('http://homeserver:6286/dav/pk1/pub/new.txt');
-    },
-  );
-
-  it('rewrites an absolute-URL Destination against the upstream base', async () => {
-    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
-    const request = new NextRequest('http://localhost:8080/api/webdav/pk1/pub/a.txt', {
+  it.each([['MOVE'], ['COPY']])('refuses %s without calling the homeserver', async (davMethod) => {
+    const fetchMock = vi.spyOn(global, 'fetch');
+    const request = new NextRequest('http://localhost:8080/api/webdav/pk1/pub/old.txt', {
       method: 'POST',
-      headers: {
-        'X-HTTP-Method-Override': 'MOVE',
-        Destination: 'http://localhost:8080/api/webdav/pk1/pub/b.txt',
-      },
+      headers: { 'X-HTTP-Method-Override': davMethod },
     });
 
-    const response = await proxyWebDavRequest(request, Promise.resolve({ path: ['pk1', 'pub', 'a.txt'] }), 'POST');
+    const response = await proxyWebDavRequest(request, Promise.resolve({ path: ['pk1', 'pub', 'old.txt'] }), 'POST');
+    const payload = await response.json();
 
-    expect(response.status).toBe(204);
-    const [, init] = fetchMock.mock.calls[0];
-    const headers = new Headers(init?.headers as HeadersInit);
-    expect(headers.get('Destination')).toBe('http://homeserver:6286/dav/pk1/pub/b.txt');
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe(`Unsupported WebDAV method: ${davMethod}`);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('round-trips binary bodies without corruption', async () => {

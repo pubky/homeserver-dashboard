@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- Rename is gone from the Files tab, and the file proxy (`/api/webdav`) no longer forwards `MOVE` or `COPY`. The homeserver's admin WebDAV share moves and copies a file without updating its own records ([pubky-homeserver#656](https://github.com/pubky/pubky-homeserver/issues/656#copy-and-rename-skip-write-finalization)): a file renamed in the dashboard could no longer be read over the public API under either name, and the event feed never learned it had moved. Files renamed before this release stay that way. Rename can return once the homeserver fix is released and the Umbrel app ships a homeserver that has it.
+
+### Fixed
+
+- "Delete by path" in the Files tab reads the listing again after deleting, so the deleted entry no longer stays on screen until Refresh.
+- File and folder names with spaces or other escaped characters are shown as named, not percent-encoded (`made by admin.txt`, not `made%20by%20admin.txt`).
+- "Delete by path" offers its preview and its Delete button only for an entry path: a user's pubky followed by a path under `/pub/`. Anything else used to be sent and came back as the homeserver's raw error.
+
 ## [0.1.33]
 
 ### Security

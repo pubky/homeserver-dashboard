@@ -5,7 +5,9 @@ import { INERT_CONTENT_HEADERS } from '@/lib/server/inert-content';
 import { getRequestId, logRouteError, logRouteInfo } from '@/lib/server/logger';
 
 const UPSTREAM_TIMEOUT_MS = 60000;
-const SUPPORTED_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PROPFIND', 'MKCOL', 'MOVE', 'COPY']);
+// No MOVE or COPY: the homeserver's admin WebDAV share runs them without
+// updating its records, which leaves the file unreachable (pubky-homeserver#656).
+const SUPPORTED_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PROPFIND', 'MKCOL']);
 
 /** Statuses that must not carry a body (Response throws otherwise). */
 const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
@@ -42,31 +44,6 @@ function buildDavPath(pathSegments: string, actualMethod: string): string {
   const suffix = pathSegments ? `/${pathSegments}` : '';
   const normalizedSuffix = needsTrailingSlash && !suffix.endsWith('/') ? `${suffix}/` : suffix || '/';
   return `/dav${normalizedSuffix}`;
-}
-
-/**
- * Rewrite a MOVE/COPY Destination header for the upstream. The browser-side
- * service addresses destinations as dashboard proxy paths (/api/webdav/<dest>);
- * the upstream expects an absolute URL inside its own /dav tree, on the same
- * base the source path uses. Forwarding the proxy path verbatim made renames
- * fail or target the wrong tree.
- */
-function rewriteDestination(destination: string, adminBaseUrl: string): string {
-  let pathname: string;
-  try {
-    // Accepts both path-only and absolute-URL destinations; URL parsing also
-    // resolves any "." / ".." segments so they cannot escape /dav.
-    pathname = new URL(destination, 'http://destination.invalid').pathname;
-  } catch {
-    throw new RouteError(400, 'bad_request', 'Invalid Destination header');
-  }
-  if (pathname.startsWith('/api/webdav')) {
-    pathname = pathname.slice('/api/webdav'.length);
-  }
-  if (pathname !== '/dav' && !pathname.startsWith('/dav/')) {
-    pathname = `/dav${pathname.startsWith('/') ? '' : '/'}${pathname}`;
-  }
-  return new URL(pathname, adminBaseUrl).toString();
 }
 
 // Handle PROPFIND and other WebDAV methods via POST with X-HTTP-Method-Override header
@@ -115,9 +92,6 @@ export async function proxyWebDavRequest(
 
     const contentType = request.headers.get('Content-Type');
     if (contentType) commonHeaders['Content-Type'] = contentType;
-
-    const destination = request.headers.get('Destination');
-    if (destination) commonHeaders['Destination'] = rewriteDestination(destination, adminBaseUrl);
 
     webdavPath = buildDavPath(pathSegments, actualMethod);
     const url = new URL(webdavPath, adminBaseUrl);

@@ -5,7 +5,6 @@ import type { WebDavFile } from '@/services/webdav';
 
 const listDirectory = vi.fn();
 const deleteFile = vi.fn();
-const moveFile = vi.fn();
 const deleteUrl = vi.fn();
 
 vi.mock('@/hooks/webdav', () => ({
@@ -15,7 +14,6 @@ vi.mock('@/hooks/webdav', () => ({
     writeFile: vi.fn(),
     deleteFile,
     createDirectory: vi.fn(),
-    moveFile,
     isLoading: false,
     error: null,
   }),
@@ -24,6 +22,8 @@ vi.mock('@/hooks/webdav', () => ({
 vi.mock('@/hooks/admin', () => ({
   useAdminActions: () => ({ deleteUrl, isDeletingUrl: false, deleteUrlError: null }),
 }));
+
+const USER = 'o4dksfbqk85ogzdb5osziw6befigbuxmuxkuxq8434q89uj56uyy';
 
 const files: WebDavFile[] = [
   {
@@ -43,6 +43,13 @@ function renderBrowser() {
 async function dialog() {
   await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
   return within(screen.getByRole('dialog'));
+}
+
+async function openDeleteByPathDialog() {
+  renderBrowser();
+  await waitFor(() => expect(screen.getByLabelText('Delete')).toBeTruthy());
+  fireEvent.click(screen.getByLabelText('Delete'));
+  return dialog();
 }
 
 describe('FileBrowser dialogs', () => {
@@ -85,14 +92,10 @@ describe('FileBrowser dialogs', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('Rename dialog offers Cancel; cancelling does not move the file', async () => {
+  it('offers no Rename on a row', async () => {
     renderBrowser();
-    await waitFor(() => expect(screen.getAllByLabelText('Rename notes.txt').length).toBeGreaterThan(0));
-    fireEvent.click(screen.getAllByLabelText('Rename notes.txt')[0]);
-    const d = await dialog();
-    fireEvent.click(d.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(moveFile).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getAllByLabelText('Delete notes.txt').length).toBeGreaterThan(0));
+    expect(screen.queryByLabelText('Rename notes.txt')).toBeNull();
   });
 
   it('delete-by-path shows the normalized target, ignores Enter, and deletes only on the button click', async () => {
@@ -102,17 +105,59 @@ describe('FileBrowser dialogs', () => {
     const d = await dialog();
 
     const input = d.getByLabelText('Path');
-    fireEvent.change(input, { target: { value: 'https://example.com/dav/pk1/pub/file.txt' } });
+    fireEvent.change(input, { target: { value: `https://example.com/dav/${USER}/pub/file.txt` } });
 
     // The normalized entry path is shown before anything is deleted.
-    expect(d.getByTestId('delete-by-path-preview').textContent).toContain('pk1/pub/file.txt');
+    expect(d.getByTestId('delete-by-path-preview').textContent).toContain(`${USER}/pub/file.txt`);
 
     // Enter must not fire the destructive call.
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(deleteUrl).not.toHaveBeenCalled();
 
     fireEvent.click(d.getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(deleteUrl).toHaveBeenCalledWith('pk1/pub/file.txt'));
+    await waitFor(() => expect(deleteUrl).toHaveBeenCalledWith(`${USER}/pub/file.txt`));
+  });
+
+  it('delete-by-path reads the listing again once the entry is deleted', async () => {
+    const d = await openDeleteByPathDialog();
+    expect(listDirectory).toHaveBeenCalledTimes(1);
+    fireEvent.change(d.getByLabelText('Path'), { target: { value: `/dav/${USER}/pub/file.txt` } });
+
+    fireEvent.click(d.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(listDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('delete-by-path keeps the dialog and the listing as they are when the delete fails', async () => {
+    deleteUrl.mockRejectedValue(new Error('Entry not found'));
+    const d = await openDeleteByPathDialog();
+    fireEvent.change(d.getByLabelText('Path'), { target: { value: `${USER}/pub/file.txt` } });
+
+    fireEvent.click(d.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(deleteUrl).toHaveBeenCalled());
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(listDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['garbage'],
+    ['pk1/pub/file.txt'],
+    [`${USER}/`],
+    [`${USER}/notes.txt`],
+    [`${USER.replace('o', 'l')}/pub/file.txt`],
+  ])('delete-by-path offers neither a preview nor Delete for %s', async (value) => {
+    const d = await openDeleteByPathDialog();
+
+    fireEvent.change(d.getByLabelText('Path'), { target: { value } });
+
+    expect(d.queryByTestId('delete-by-path-preview')).toBeNull();
+    expect(d.getByTestId('delete-by-path-invalid')).toBeTruthy();
+    const button = d.getByRole('button', { name: 'Delete' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(deleteUrl).not.toHaveBeenCalled();
   });
 
   it('delete-by-path offers Cancel', async () => {
