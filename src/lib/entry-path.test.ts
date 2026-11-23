@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest';
+import { parseEntryPath } from './entry-path';
+
+const USER = 'o4dksfbqk85ogzdb5osziw6befigbuxmuxkuxq8434q89uj56uyy';
+const ENTRY = `${USER}/pub/dir/file.txt`;
+
+describe('parseEntryPath', () => {
+  it.each([
+    [ENTRY],
+    [`  /${ENTRY}  `],
+    [`/dav/${ENTRY}`],
+    [`dav/${ENTRY}`],
+    [`/webdav/${ENTRY}`],
+    [`https://admin.example.com/dav/${ENTRY}`],
+    [`http://127.0.0.1:6288/webdav/${ENTRY}`],
+  ])('reads the entry path out of %s', (input) => {
+    expect(parseEntryPath(input)).toBe(ENTRY);
+  });
+
+  it.each([
+    [''],
+    ['   '],
+    ['garbage'],
+    ['pk1/pub/file.txt'],
+    [`${USER}`],
+    [`${USER}/`],
+    [`${USER}/pub/`],
+    [`${USER}/notes.txt`],
+    // `l` is not in the z-base-32 alphabet.
+    [`${USER.replace('o', 'l')}/pub/file.txt`],
+    [`https://example.com/${USER}`],
+  ])('finds no entry path in %j', (input) => {
+    expect(parseEntryPath(input)).toBeNull();
+  });
+});

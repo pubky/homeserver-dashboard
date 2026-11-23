@@ -17,6 +17,7 @@
 import { isIP } from 'net';
 import { createPublicKey, verify as ed25519Verify } from 'crypto';
 import { Client, SignedPacket } from '@synonymdev/pkarr';
+import { Z32_ALPHABET } from '@/lib/pubky';
 
 export type PkarrGate = 'match' | 'mismatch' | 'not_compared';
 export type PkarrVerdict = 'verified' | 'mismatch' | 'not_found' | 'invalid' | 'unavailable';
@@ -69,8 +70,6 @@ interface RawRecord {
     value?: string;
   };
 }
-
-export const Z32_PUBKEY_RE = /^[ybndrfg8ejkmcpqxot1uwisza345h769]{52}$/;
 
 const DEFAULT_RELAYS = ['https://pkarr.pubky.app', 'https://pkarr.pubky.org', 'https://relay.pkarr.org'];
 /** Bounds both the WASM client's resolve and the classification fetches. */
@@ -311,8 +310,6 @@ export type PkarrResolveOutcome =
   | { status: 'found'; facts: PkarrPacketFacts }
   | { status: 'not_found' }
   | { status: 'unavailable' };
-
-const Z32_ALPHABET = 'ybndrfg8ejkmcpqxot1uwisza345h769';
 
 /** z-base-32 decode of a 52-char pkarr pubkey into its 32 bytes. */
 export function z32DecodePubkey(pubkey: string): Uint8Array {

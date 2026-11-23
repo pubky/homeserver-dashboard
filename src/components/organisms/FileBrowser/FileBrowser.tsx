@@ -34,6 +34,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+import { parseEntryPath } from '@/lib/entry-path';
 import { cn } from '@/lib/utils';
 import type { FileBrowserProps } from './FileBrowser.types';
 
@@ -45,9 +46,6 @@ type SortOption = { field: SortField; direction: SortDirection };
 function joinPath(base: string, name: string): string {
   return base.endsWith('/') ? `${base}${name}` : `${base}/${name}`;
 }
-
-/** What the admin delete takes: a user's pubky (z-base-32), then a path under /pub/. */
-const ENTRY_PATH = /^[ybndrfg8ejkmcpqxot1uwisza345h769]{52}\/pub\/.+/;
 
 /** The sortable table columns (the Name column sorts by entry type so folders
  * group together). The Actions column is not sortable and is rendered apart. */
@@ -273,41 +271,10 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
     setIsSaving(false);
   };
 
-  const normalizeAdminDeletePath = (raw: string): string => {
-    let value = raw.trim();
-    if (!value) return '';
-
-    // Support pasting full URLs
-    if (/^https?:\/\//i.test(value)) {
-      try {
-        value = new URL(value).pathname;
-      } catch {
-        // fall through
-      }
-    }
-
-    // Allow users to paste /dav/... or /webdav/... paths; normalize to entry_path
-    const davMarker = '/dav/';
-    const webdavMarker = '/webdav/';
-    if (value.includes(davMarker)) {
-      value = value.split(davMarker).slice(1).join(davMarker);
-    }
-    if (value.includes(webdavMarker)) {
-      value = value.split(webdavMarker).slice(1).join(webdavMarker);
-    }
-
-    value = value.replace(/^\/+/, '');
-    value = value.replace(/^dav\/+/, '');
-    value = value.replace(/^webdav\/+/, '');
-
-    return value;
-  };
-
-  const deleteByPathEntry = normalizeAdminDeletePath(deleteByPathInput);
-  const isDeleteByPathEntryValid = ENTRY_PATH.test(deleteByPathEntry);
+  const deleteByPathEntry = parseEntryPath(deleteByPathInput);
 
   const handleDeleteByPath = async () => {
-    if (!isDeleteByPathEntryValid) return;
+    if (!deleteByPathEntry) return;
 
     try {
       await deleteUrl(deleteByPathEntry);
@@ -925,13 +892,13 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             </div>
           </div>
 
-          {isDeleteByPathEntryValid && (
+          {deleteByPathEntry && (
             <p className="text-xs text-muted-foreground" data-testid="delete-by-path-preview">
               Will delete:{' '}
               <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">{deleteByPathEntry}</code>
             </p>
           )}
-          {deleteByPathEntry && !isDeleteByPathEntryValid && (
+          {deleteByPathInput.trim() && !deleteByPathEntry && (
             <p className="text-xs text-destructive" data-testid="delete-by-path-invalid">
               Not an entry path: it needs a user&apos;s pubky, then a path under /pub/.
             </p>
@@ -941,11 +908,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             <Button variant="ghost" onClick={() => setShowDeleteByPathDialog(false)} disabled={isDeletingUrl}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteByPath}
-              disabled={!isDeleteByPathEntryValid || isDeletingUrl}
-            >
+            <Button variant="destructive" onClick={handleDeleteByPath} disabled={!deleteByPathEntry || isDeletingUrl}>
               {isDeletingUrl ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>

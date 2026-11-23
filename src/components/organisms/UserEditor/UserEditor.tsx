@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AdminService } from '@/services/admin/admin';
 import { formatUsage } from '@/lib/format';
+import { Z32_PUBKEY_PATTERN } from '@/lib/pubky';
 import type { AdminUser, UserQuotaResponse } from '@/services/admin/admin.types';
 import { QUOTA_FIELDS, type QuotaText, defaultText, quotaPatch, quotaText } from '@/lib/quota-form';
 
@@ -35,12 +36,15 @@ const message = (error: unknown, fallback: string) =>
 const statusOf = (error: unknown) =>
   typeof error === 'object' && error !== null && 'status' in error ? (error as { status?: number }).status : undefined;
 
+/** The `pubky` prefix apps show in front of a key. */
+const PUBKY_PREFIX = new RegExp(`^pubky(?=${Z32_PUBKEY_PATTERN}$)`);
+
 /** A pubky as typed or pasted, without the `pubky` prefix or the pubky:// scheme. */
 const bareKey = (input: string) =>
   input
     .trim()
     .replace(/^pubky:\/\//, '')
-    .replace(/^pubky(?=.{52}$)/, '');
+    .replace(PUBKY_PREFIX, '');
 
 /**
  * Look up one user by pubky, change their allowance (storage, rates, bursts,
