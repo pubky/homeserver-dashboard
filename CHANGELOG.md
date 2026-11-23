@@ -5,22 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.34]
-
-### Security
-
-- Next.js is upgraded from 16.2.6 to 16.4.5. The React Server Components runtime bundled in Next.js before 16.4.1 allows unauthenticated remote code execution through a crafted Flight payload ([GHSA-xqc2-xf4c-x3h3](https://github.com/facebook/react/security/advisories/GHSA-xqc2-xf4c-x3h3), critical). 16.4.1 also fixes an unauthenticated RCE in the image optimizer when SVG files are used ([GHSA-2464-fhr4-w9xw](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw), critical) and a Server Actions denial of service ([GHSA-p3m5-59mp-jv5r](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r)). 16.4.5 is the current release and adds the November 3, 2026 fixes, among them an HttpOnly cookie exposure on Edge routes ([GHSA-f3mh-rxg3-f5g2](https://github.com/vercel/next.js/security/advisories/GHSA-f3mh-rxg3-f5g2)).
-
-### Added
-
-- The Invites tab lists every invite code the homeserver has issued, most recent first, with Unused and Used filters. Unused codes can be copied; used ones show when they were used and by which pubky. The list appears only when the homeserver answers `GET /signup_tokens`, and reads at most 5000 codes, saying so when the list is cut short. On homeservers that report a code's limits (0.17+) each code has a "Limits" button; others, including the 0.16.1 the Umbrel app pins, show a note instead. The "Created this session" list is gone: a new code is shown once with its QR code and link, then lives in the list.
-- "Create invite" can set limits for that invite: storage, download and upload rates and bursts, and writable paths, sent to `POST /generate_signup_token` (an empty form still uses `GET`). Where the dashboard can read `config.toml`, each empty field shows the homeserver's default as its placeholder, and the homeserver's own error for a bad value is shown as is. `GET /api/server-config` also returns `defaultQuota`.
-- The Users tab works again, on routes the homeserver actually has. It used to depend on `GET /users/disabled`, which is in no homeserver release, so it was hidden everywhere. Look an account up by pubky to change its allowance (storage, rates, bursts, writable paths) through `GET|PATCH /users/{pubkey}/quota` and to disable or enable it; clearing a field hands it back to the homeserver's default. On homeserver 0.17+ the tab also lists every account with its signup date, storage used against its allowance and status, filtered by All, Enabled or Disabled and ordered by newest or most storage. On 0.16.1 the tab shows the editor alone, and an account's status reads "Not known" until it is disabled or enabled here. `/api/admin/[[...path]]` now passes `PATCH` through.
-
-### Fixed
-
-- Disabling or enabling a user no longer reports an error after the homeserver did it. The homeserver answers those calls with a plain-text `Ok`, which the dashboard tried to parse as JSON.
-
 ## [0.1.33]
 
 ### Security
