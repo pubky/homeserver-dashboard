@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useWebDav } from '@/hooks/webdav';
 import { useAdminActions } from '@/hooks/admin';
+import { decodedPath } from '@/services/webdav';
 import type { WebDavFile, WebDavError } from '@/services/webdav';
 import {
   ClipboardPaste,
@@ -364,7 +365,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
     { name: '/', path: '/' },
     ...pathParts.map((part, index) => {
       const path = '/' + pathParts.slice(0, index + 1).join('/') + (index < pathParts.length - 1 ? '/' : '');
-      return { name: part, path };
+      return { name: decodedPath(part), path };
     }),
   ];
 
@@ -662,7 +663,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent className="max-h-[80vh] max-w-[calc(100vw-2rem)] sm:max-w-[min(56rem,calc(100vw-4rem))]">
           <DialogHeader>
             <DialogTitle>{selectedFile?.displayName}</DialogTitle>
-            <DialogDescription>{selectedFile?.path}</DialogDescription>
+            <DialogDescription>{selectedFile && decodedPath(selectedFile.path)}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {isEditingFile ? (
@@ -699,7 +700,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New File</DialogTitle>
-            <DialogDescription className="break-all">Create a new file in {currentPath}</DialogDescription>
+            <DialogDescription className="break-all">Create a new file in {decodedPath(currentPath)}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -774,7 +775,9 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Directory</DialogTitle>
-            <DialogDescription className="break-all">Create a new directory in {currentPath}</DialogDescription>
+            <DialogDescription className="break-all">
+              Create a new directory in {decodedPath(currentPath)}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

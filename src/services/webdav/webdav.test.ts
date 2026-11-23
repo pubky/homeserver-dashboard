@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WebDavService } from './webdav';
+import { WebDavService, decodedPath } from './webdav';
 import type { WebDavError } from './webdav.types';
 
 describe('WebDavService error envelope', () => {
@@ -106,5 +106,16 @@ describe('WebDavService error envelope', () => {
       // The path keeps its encoding: it is what later requests send.
       { displayName: 'made by admin.txt', path: '/pk1/pub/made%20by%20admin.txt' },
     ]);
+  });
+});
+
+describe('decodedPath', () => {
+  it('decodes each name and keeps the slashes', () => {
+    expect(decodedPath('/pk1/pub/my%20folder/caf%C3%A9.txt')).toBe('/pk1/pub/my folder/café.txt');
+    expect(decodedPath('/pk1/pub/')).toBe('/pk1/pub/');
+  });
+
+  it('leaves a name that is not valid percent-encoding as it was sent', () => {
+    expect(decodedPath('/pk1/pub/100%/x%20y')).toBe('/pk1/pub/100%/x y');
   });
 });

@@ -74,6 +74,17 @@ describe('FileBrowser dialogs', () => {
     expect(deleteFile).not.toHaveBeenCalled();
   });
 
+  it('shows folder names decoded in the breadcrumbs and the New File dialog', async () => {
+    render(<FileBrowser initialPath="/pk1/pub/my%20folder/" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'my folder' })).toBeTruthy());
+    // The listing is still asked for by the path the homeserver sent.
+    expect(listDirectory).toHaveBeenCalledWith('/pk1/pub/my%20folder/');
+
+    fireEvent.click(screen.getByRole('button', { name: 'New File' }));
+    const d = await dialog();
+    expect(d.getByText('Create a new file in /pk1/pub/my folder/')).toBeTruthy();
+  });
+
   it('New File dialog offers Cancel', async () => {
     renderBrowser();
     await waitFor(() => expect(screen.getByRole('button', { name: 'New File' })).toBeTruthy());

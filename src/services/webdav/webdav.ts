@@ -1,14 +1,23 @@
 import type { WebDavFile, WebDavDirectory, WebDavError } from './webdav.types';
 
-/** The name an href path ends in, percent-decoded; left as sent when it is not valid percent-encoding. */
-function decodedName(path: string): string | undefined {
-  const segment = path.split('/').filter(Boolean).pop();
-  if (!segment) return undefined;
+/** One path segment as the name it encodes; left as sent when it is not valid percent-encoding. */
+function decodedSegment(segment: string): string {
   try {
     return decodeURIComponent(segment);
   } catch {
     return segment;
   }
+}
+
+/** The name an href path ends in, percent-decoded. */
+function decodedName(path: string): string | undefined {
+  const segment = path.split('/').filter(Boolean).pop();
+  return segment && decodedSegment(segment);
+}
+
+/** A listing path as its names read, for display only: requests need the path as the homeserver sent it. */
+export function decodedPath(path: string): string {
+  return path.split('/').map(decodedSegment).join('/');
 }
 
 /**
