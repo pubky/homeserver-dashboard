@@ -1,20 +1,28 @@
 // @vitest-environment node
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, PATCH } from './route';
 
 describe('admin proxy route', () => {
   const originalEnv = { ...process.env };
+  let configDir: string | undefined;
 
   beforeEach(() => {
     vi.restoreAllMocks();
     process.env.ADMIN_BASE_URL = 'http://homeserver:6286';
     process.env.ADMIN_TOKEN = 'secret-token';
+    // No config.toml to fall back on, whatever this machine has.
+    process.env.HOMESERVER_CONFIG_PATH = '/nonexistent/config.toml';
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
+    if (configDir) await fs.rm(configDir, { recursive: true, force: true });
+    configDir = undefined;
   });
 
   it('returns sanitized config error when env is missing', async () => {
@@ -29,6 +37,28 @@ describe('admin proxy route', () => {
     expect(payload.error).toBe('Homeserver admin API is not configured');
     expect(payload).not.toHaveProperty('details');
     expect(payload).not.toHaveProperty('attemptedUrl');
+  });
+
+  it("calls the address and sends the password from the homeserver's config.toml when the variables are not set", async () => {
+    configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'admin-proxy-'));
+    await fs.writeFile(
+      path.join(configDir, 'config.toml'),
+      '[admin]\nlisten_socket = "127.0.0.1:7777"\nadmin_password = "from-the-config"\n',
+    );
+    delete process.env.ADMIN_BASE_URL;
+    delete process.env.ADMIN_TOKEN;
+    process.env.HOMESERVER_CONFIG_PATH = path.join(configDir, 'config.toml');
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const request = new NextRequest('http://localhost:8080/api/admin/info');
+    const response = await GET(request, { params: Promise.resolve({ path: ['info'] }) });
+
+    expect(response.status).toBe(200);
+    const [urlArg, initArg] = fetchMock.mock.calls[0];
+    expect(String(urlArg)).toBe('http://127.0.0.1:7777/info');
+    expect((initArg as RequestInit).headers).toEqual(
+      expect.objectContaining({ 'X-Admin-Password': 'from-the-config' }),
+    );
   });
 
   it('proxies successful response and forwards query params', async () => {

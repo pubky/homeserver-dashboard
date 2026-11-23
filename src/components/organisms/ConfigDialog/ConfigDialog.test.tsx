@@ -13,6 +13,8 @@ function mockBackend(initial: {
   preview?: Record<string, unknown>;
   adminInfo?: Record<string, unknown>;
   publicHealth?: Record<string, unknown>;
+  /** The homeserver's config as `/api/server-config` answers it; without one the config view has nothing to show. */
+  serverConfig?: Record<string, unknown>;
 }) {
   const backend = {
     cloudflareConfig: initial.cloudflareConfig,
@@ -44,7 +46,9 @@ function mockBackend(initial: {
     }
     if (url.startsWith('/api/admin/info')) return respond(backend.adminInfo);
     if (url.startsWith('/api/public-health')) return respond(backend.publicHealth);
-    if (url.startsWith('/api/server-config')) return respond({ error: 'not available' }, 404);
+    if (url.startsWith('/api/server-config')) {
+      return initial.serverConfig ? respond(initial.serverConfig) : respond({ error: 'not available' }, 404);
+    }
     return respond({});
   });
   return backend;
@@ -64,6 +68,30 @@ describe('ConfigDialog Cloudflare status surface', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('says what changing admin_password means for this kind of deployment', async () => {
+    mockBackend({
+      cloudflareConfig: cfConfig('off'),
+      serverConfig: { config: '[admin]\n', checksum: 'sha256:x', mtime: '2026-01-01T00:00:00Z', writable: false },
+    });
+    const { unmount } = render(
+      <PlatformProvider platform="standalone">
+        <ConfigDialog open onOpenChange={() => {}} />
+      </PlatformProvider>,
+    );
+    const standalone = (await screen.findByTestId('admin-password-note')).textContent;
+    expect(standalone).toContain('restart the homeserver');
+    expect(standalone).not.toContain('Do not change');
+    unmount();
+
+    render(
+      <PlatformProvider platform="umbrel">
+        <ConfigDialog open onOpenChange={() => {}} />
+      </PlatformProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Config' }));
+    expect((await screen.findByTestId('admin-password-note')).textContent).toContain('Do not change');
   });
 
   it('standalone: the Cloudflare tab and all its setup cards are hidden', async () => {

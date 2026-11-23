@@ -12,6 +12,8 @@ describe('generate_signup_token route', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     process.env.ADMIN_BASE_URL = 'http://homeserver:6286';
     process.env.ADMIN_TOKEN = 'secret-token';
+    // No config.toml to fall back on, whatever this machine has.
+    process.env.HOMESERVER_CONFIG_PATH = '/nonexistent/config.toml';
   });
 
   afterEach(() => {
