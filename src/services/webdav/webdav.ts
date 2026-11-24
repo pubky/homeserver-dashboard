@@ -1,5 +1,25 @@
 import type { WebDavFile, WebDavDirectory, WebDavError } from './webdav.types';
 
+/** One path segment as the name it encodes; left as sent when it is not valid percent-encoding. */
+function decodedSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/** The name an href path ends in, percent-decoded. */
+function decodedName(path: string): string | undefined {
+  const segment = path.split('/').filter(Boolean).pop();
+  return segment && decodedSegment(segment);
+}
+
+/** A listing path as its names read, for display only: requests need the path as the homeserver sent it. */
+export function decodedPath(path: string): string {
+  return path.split('/').map(decodedSegment).join('/');
+}
+
 /**
  * WebDAV service for interacting with the homeserver's WebDAV endpoint.
  * Handles PROPFIND (list), GET (read), PUT (write), DELETE, MKCOL (create directory).
@@ -24,7 +44,7 @@ export class WebDavService {
 
     // For WebDAV methods that aren't standard HTTP methods, use POST with override header
     const method = init?.method || 'GET';
-    const isWebDavMethod = ['PROPFIND', 'MKCOL', 'MOVE', 'COPY'].includes(method);
+    const isWebDavMethod = ['PROPFIND', 'MKCOL'].includes(method);
 
     const headers: Record<string, string> = {
       ...Object.fromEntries(new Headers(init?.headers).entries()),
@@ -157,31 +177,6 @@ export class WebDavService {
   }
 
   /**
-   * Move/rename a file or directory.
-   * @param sourcePath Source WebDAV path
-   * @param destinationPath Destination WebDAV path
-   */
-  async move(sourcePath: string, destinationPath: string): Promise<void> {
-    // Normalize destination path for API route; the proxy rewrites this
-    // same-origin path into the absolute upstream /dav URL.
-    let normalizedDest = destinationPath;
-    if (normalizedDest.startsWith('/dav')) {
-      normalizedDest = normalizedDest.substring(4);
-    }
-    if (!normalizedDest.startsWith('/')) {
-      normalizedDest = '/' + normalizedDest;
-    }
-    const destUrl = `${this.baseUrl}${normalizedDest}`;
-
-    await this.request(sourcePath, {
-      method: 'MOVE',
-      headers: {
-        Destination: destUrl,
-      },
-    });
-  }
-
-  /**
    * Parse PROPFIND XML response into WebDavFile array.
    */
   private parsePropfindResponse(xmlText: string, basePath: string): WebDavFile[] {
@@ -276,7 +271,7 @@ export class WebDavService {
       }
 
       files.push({
-        displayName: displayName || path.split('/').filter(Boolean).pop() || path,
+        displayName: displayName || decodedName(path) || path,
         contentType: contentType || (isCollection ? 'directory' : 'application/octet-stream'),
         contentLength: contentLength ? parseInt(contentLength, 10) : undefined,
         lastModified,

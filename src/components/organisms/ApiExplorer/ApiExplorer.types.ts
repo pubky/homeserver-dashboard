@@ -1,5 +1,5 @@
 export type ApiEndpoint = {
-  method: 'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PROPFIND' | 'MKCOL' | 'MOVE' | 'COPY';
+  method: 'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PROPFIND' | 'MKCOL';
   path: string;
   description: string;
   server: 'admin' | 'client' | 'metrics';

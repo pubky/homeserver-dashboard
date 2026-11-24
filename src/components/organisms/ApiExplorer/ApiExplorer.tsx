@@ -239,9 +239,9 @@ export function resolveRequestUrl(server: 'admin' | 'client' | 'metrics', path: 
 export function ApiExplorer() {
   const [selectedServer, setSelectedServer] = useState<'admin' | 'client' | 'metrics'>('admin');
   const [selectedEndpoint, setSelectedEndpoint] = useState<string>('');
-  const [customMethod, setCustomMethod] = useState<
-    'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PROPFIND' | 'MKCOL' | 'MOVE' | 'COPY'
-  >('GET');
+  const [customMethod, setCustomMethod] = useState<'GET' | 'POST' | 'DELETE' | 'PUT' | 'HEAD' | 'PROPFIND' | 'MKCOL'>(
+    'GET',
+  );
   const [customPath, setCustomPath] = useState('');
   const [requestBody, setRequestBody] = useState('');
   const [response, setResponse] = useState<{
@@ -308,7 +308,7 @@ export function ApiExplorer() {
       // requests go through but the homeserver will answer 401.
 
       // WebDAV methods that may need XML bodies
-      const webdavMethods = ['PROPFIND', 'MKCOL', 'MOVE', 'COPY'];
+      const webdavMethods = ['PROPFIND', 'MKCOL'];
       const needsBody = method !== 'GET' && method !== 'HEAD' && requestBody.trim();
       const isWebDAV = webdavMethods.includes(method);
 
@@ -507,8 +507,6 @@ export function ApiExplorer() {
                   <SelectItem value="HEAD">HEAD</SelectItem>
                   <SelectItem value="PROPFIND">PROPFIND</SelectItem>
                   <SelectItem value="MKCOL">MKCOL</SelectItem>
-                  <SelectItem value="MOVE">MOVE</SelectItem>
-                  <SelectItem value="COPY">COPY</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -527,9 +525,7 @@ export function ApiExplorer() {
             customMethod === 'PUT' ||
             customMethod === 'DELETE' ||
             customMethod === 'PROPFIND' ||
-            customMethod === 'MKCOL' ||
-            customMethod === 'MOVE' ||
-            customMethod === 'COPY') && (
+            customMethod === 'MKCOL') && (
             <div className="space-y-2">
               <Label>
                 Request Body
@@ -543,10 +539,7 @@ export function ApiExplorer() {
                 placeholder={
                   selectedPreset?.exampleBody?.includes('binary')
                     ? 'Base64-encoded binary data or raw bytes'
-                    : customMethod === 'PROPFIND' ||
-                        customMethod === 'MKCOL' ||
-                        customMethod === 'MOVE' ||
-                        customMethod === 'COPY'
+                    : customMethod === 'PROPFIND' || customMethod === 'MKCOL'
                       ? '<?xml version="1.0"?><d:propfind>...</d:propfind> (WebDAV XML)'
                       : '{"key": "value"} or file content'
                 }

@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useWebDav } from '@/hooks/webdav';
 import { useAdminActions } from '@/hooks/admin';
+import { decodedPath } from '@/services/webdav';
 import type { WebDavFile, WebDavError } from '@/services/webdav';
 import {
   ClipboardPaste,
@@ -32,8 +33,8 @@ import {
   Search,
   ArrowUp,
   ArrowDown,
-  Pencil,
 } from 'lucide-react';
+import { parseEntryPath } from '@/lib/entry-path';
 import { cn } from '@/lib/utils';
 import type { FileBrowserProps } from './FileBrowser.types';
 
@@ -84,51 +85,28 @@ function SortHeader({
   );
 }
 
-/** The Rename + Delete icon buttons for one file row, shared by the desktop
- * table and the mobile card (each wraps these in its own layout div). */
-function FileRowActions({
-  file,
-  onRename,
-  onDelete,
-}: {
-  file: WebDavFile;
-  onRename: (file: WebDavFile) => void;
-  onDelete: (file: WebDavFile) => void;
-}) {
+/** The Delete icon button for one file row, shared by the desktop table and
+ * the mobile card (each wraps it in its own layout div). */
+function FileRowActions({ file, onDelete }: { file: WebDavFile; onDelete: (file: WebDavFile) => void }) {
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRename(file);
-        }}
-        className="h-7 w-7 p-0"
-        title="Rename"
-        aria-label={`Rename ${file.displayName}`}
-      >
-        <Pencil className="h-3 w-3" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(file);
-        }}
-        className="h-7 w-7 p-0"
-        title="Delete"
-        aria-label={`Delete ${file.displayName}`}
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
-    </>
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        onDelete(file);
+      }}
+      className="h-7 w-7 p-0"
+      title="Delete"
+      aria-label={`Delete ${file.displayName}`}
+    >
+      <Trash2 className="h-3 w-3" />
+    </Button>
   );
 }
 
 export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }: FileBrowserProps) {
-  const { listDirectory, readFile, writeFile, deleteFile, createDirectory, moveFile, isLoading, error } = useWebDav();
+  const { listDirectory, readFile, writeFile, deleteFile, createDirectory, isLoading, error } = useWebDav();
   const { deleteUrl, isDeletingUrl, deleteUrlError } = useAdminActions();
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [files, setFiles] = useState<WebDavFile[]>([]);
@@ -139,16 +117,12 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showCreateDirDialog, setShowCreateDirDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [showDeleteByPathDialog, setShowDeleteByPathDialog] = useState(false);
   const [deleteByPathInput, setDeleteByPathInput] = useState('');
-  const [deleteByPathValidationError, setDeleteByPathValidationError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<WebDavFile | null>(null);
-  const [fileToRename, setFileToRename] = useState<WebDavFile | null>(null);
   const [newFileName, setNewFileName] = useState('');
   const [newFileContent, setNewFileContent] = useState('');
   const [newDirName, setNewDirName] = useState('');
-  const [renameValue, setRenameValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,7 +137,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
   }, [searchQuery]);
 
   // Listing errors are separate from the hook's general `error` state, which is
-  // shared with readFile / writeFile / deleteFile / createDirectory / moveFile.
+  // shared with readFile / writeFile / deleteFile / createDirectory.
   // We need the distinction so an action failure on a populated directory
   // doesn't wipe the file list and doesn't show a Retry button that would
   // re-run the listing, not the failed action.
@@ -275,11 +249,6 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
     setIsSaving(false);
   };
 
-  const beginRename = (file: WebDavFile) => {
-    setFileToRename(file);
-    setRenameValue(file.displayName);
-    setShowRenameDialog(true);
-  };
   const beginDelete = (file: WebDavFile) => {
     setFileToDelete(file);
     setShowDeleteDialog(true);
@@ -302,76 +271,18 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
     setIsSaving(false);
   };
 
-  const normalizeAdminDeletePath = (raw: string): string => {
-    let value = raw.trim();
-    if (!value) return '';
-
-    // Support pasting full URLs
-    if (/^https?:\/\//i.test(value)) {
-      try {
-        value = new URL(value).pathname;
-      } catch {
-        // fall through
-      }
-    }
-
-    // Allow users to paste /dav/... or /webdav/... paths; normalize to entry_path
-    const davMarker = '/dav/';
-    const webdavMarker = '/webdav/';
-    if (value.includes(davMarker)) {
-      value = value.split(davMarker).slice(1).join(davMarker);
-    }
-    if (value.includes(webdavMarker)) {
-      value = value.split(webdavMarker).slice(1).join(webdavMarker);
-    }
-
-    value = value.replace(/^\/+/, '');
-    value = value.replace(/^dav\/+/, '');
-    value = value.replace(/^webdav\/+/, '');
-
-    return value;
-  };
+  const deleteByPathEntry = parseEntryPath(deleteByPathInput);
 
   const handleDeleteByPath = async () => {
-    const normalized = normalizeAdminDeletePath(deleteByPathInput);
-    if (!normalized) {
-      setDeleteByPathValidationError('Please enter an entry path to delete.');
-      return;
-    }
+    if (!deleteByPathEntry) return;
 
-    setDeleteByPathValidationError(null);
     try {
-      await deleteUrl(normalized);
+      await deleteUrl(deleteByPathEntry);
       setShowDeleteByPathDialog(false);
       setDeleteByPathInput('');
+      await loadDirectory(currentPath);
     } catch {
       // error surfaced via deleteUrlError
-    }
-  };
-
-  const handleRename = async () => {
-    if (!fileToRename || !renameValue.trim()) return;
-
-    setIsSaving(true);
-    setValidationError(null);
-
-    try {
-      // Get the parent directory path
-      const parentPath = fileToRename.path.substring(0, fileToRename.path.lastIndexOf('/'));
-      const newPath = `${joinPath(parentPath, renameValue.trim())}${fileToRename.isCollection ? '/' : ''}`;
-
-      const success = await moveFile(fileToRename.path, newPath);
-      if (!success) {
-        throw new Error('Failed to rename file');
-      }
-      setShowRenameDialog(false);
-      setFileToRename(null);
-      setRenameValue('');
-      await loadDirectory(currentPath);
-    } catch (err) {
-      setValidationError(err instanceof Error ? err.message : 'Failed to rename file');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -421,7 +332,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
     { name: '/', path: '/' },
     ...pathParts.map((part, index) => {
       const path = '/' + pathParts.slice(0, index + 1).join('/') + (index < pathParts.length - 1 ? '/' : '');
-      return { name: part, path };
+      return { name: decodedPath(part), path };
     }),
   ];
 
@@ -463,10 +374,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setDeleteByPathValidationError(null);
-                  setShowDeleteByPathDialog(true);
-                }}
+                onClick={() => setShowDeleteByPathDialog(true)}
                 disabled={isDeletingUrl}
                 title="Delete an entry by pasting its path"
                 aria-label="Delete"
@@ -588,7 +496,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             </Alert>
           )}
 
-          {/* Action error (open / save / delete / upload / move). Keeps the file
+          {/* Action error (open / save / delete / upload). Keeps the file
               list visible so the user does not lose their place; no Retry button
               because a listing retry would not redo the failed action. */}
           {error && !listingError && (
@@ -663,7 +571,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
                         <td className="p-2 text-sm text-muted-foreground">{formatDate(file.lastModified)}</td>
                         <td className="p-2">
                           <div className="flex justify-end gap-1">
-                            <FileRowActions file={file} onRename={beginRename} onDelete={beginDelete} />
+                            <FileRowActions file={file} onDelete={beginDelete} />
                           </div>
                         </td>
                       </tr>
@@ -706,7 +614,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
-                        <FileRowActions file={file} onRename={beginRename} onDelete={beginDelete} />
+                        <FileRowActions file={file} onDelete={beginDelete} />
                       </div>
                     </div>
                   </div>
@@ -722,7 +630,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent className="max-h-[80vh] max-w-[calc(100vw-2rem)] sm:max-w-[min(56rem,calc(100vw-4rem))]">
           <DialogHeader>
             <DialogTitle>{selectedFile?.displayName}</DialogTitle>
-            <DialogDescription>{selectedFile?.path}</DialogDescription>
+            <DialogDescription>{selectedFile && decodedPath(selectedFile.path)}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {isEditingFile ? (
@@ -759,7 +667,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New File</DialogTitle>
-            <DialogDescription className="break-all">Create a new file in {currentPath}</DialogDescription>
+            <DialogDescription className="break-all">Create a new file in {decodedPath(currentPath)}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -834,7 +742,9 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Directory</DialogTitle>
-            <DialogDescription className="break-all">Create a new directory in {currentPath}</DialogDescription>
+            <DialogDescription className="break-all">
+              Create a new directory in {decodedPath(currentPath)}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -914,82 +824,6 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
         </DialogContent>
       </Dialog>
 
-      {/* Rename Dialog */}
-      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename {fileToRename?.isCollection ? 'Directory' : 'File'}</DialogTitle>
-            <DialogDescription>
-              Enter a new name for <strong>{fileToRename?.displayName}</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {validationError && (
-              <Alert variant="destructive">
-                <AlertDescription>{validationError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="rename-value">New Name</Label>
-              <div className="relative">
-                <Input
-                  id="rename-value"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  placeholder={fileToRename?.displayName}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && renameValue.trim()) {
-                      handleRename();
-                    }
-                  }}
-                  className="pr-16"
-                />
-                <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
-                  {renameValue ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 rounded-full bg-transparent text-muted-foreground hover:bg-muted/30"
-                      onClick={() => setRenameValue('')}
-                      title="Clear"
-                      aria-label="Clear new name"
-                    >
-                      <span className="sr-only">Clear</span>✕
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 rounded-full bg-transparent text-muted-foreground hover:bg-muted/30"
-                      onClick={async () => {
-                        try {
-                          const text = await navigator.clipboard.readText();
-                          setRenameValue(text);
-                        } catch {
-                          // ignore clipboard errors
-                        }
-                      }}
-                      title="Paste from clipboard"
-                      aria-label="Paste new name from clipboard"
-                    >
-                      <ClipboardPaste className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowRenameDialog(false)} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button onClick={handleRename} disabled={!renameValue.trim() || isSaving}>
-              {isSaving ? 'Renaming...' : 'Rename'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Delete by Path Dialog (Admin) */}
       <Dialog open={showDeleteByPathDialog} onOpenChange={setShowDeleteByPathDialog}>
         <DialogContent>
@@ -1001,10 +835,10 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             </DialogDescription>
           </DialogHeader>
 
-          {(deleteByPathValidationError || deleteUrlError) && (
+          {deleteUrlError && (
             <Alert variant="destructive">
               <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{deleteByPathValidationError || deleteUrlError?.message}</AlertDescription>
+              <AlertDescription>{deleteUrlError.message}</AlertDescription>
             </Alert>
           )}
 
@@ -1058,12 +892,15 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             </div>
           </div>
 
-          {normalizeAdminDeletePath(deleteByPathInput) && (
+          {deleteByPathEntry && (
             <p className="text-xs text-muted-foreground" data-testid="delete-by-path-preview">
               Will delete:{' '}
-              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">
-                {normalizeAdminDeletePath(deleteByPathInput)}
-              </code>
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs break-all">{deleteByPathEntry}</code>
+            </p>
+          )}
+          {deleteByPathInput.trim() && !deleteByPathEntry && (
+            <p className="text-xs text-destructive" data-testid="delete-by-path-invalid">
+              Not an entry path: it needs a user&apos;s pubky, then a path under /pub/.
             </p>
           )}
 
@@ -1071,7 +908,7 @@ export function FileBrowser({ initialPath = '/', diskUsedMB, homeserverPubkey }:
             <Button variant="ghost" onClick={() => setShowDeleteByPathDialog(false)} disabled={isDeletingUrl}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteByPath} disabled={isDeletingUrl}>
+            <Button variant="destructive" onClick={handleDeleteByPath} disabled={!deleteByPathEntry || isDeletingUrl}>
               {isDeletingUrl ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>

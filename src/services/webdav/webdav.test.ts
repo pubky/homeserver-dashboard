@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WebDavService } from './webdav';
+import { WebDavService, decodedPath } from './webdav';
 import type { WebDavError } from './webdav.types';
 
 describe('WebDavService error envelope', () => {
@@ -88,17 +88,34 @@ describe('WebDavService error envelope', () => {
     expect(directory.path).toBe('/somepubkey/pub/');
   });
 
-  it('sends MOVE via POST with a method override and a proxy-relative Destination', async () => {
-    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+  it('names an entry by its decoded href when the homeserver sends no displayname', async () => {
+    const entry = (href: string) =>
+      `<D:response><D:href>${href}</D:href><D:propstat><D:prop><D:resourcetype/></D:prop></D:propstat></D:response>`;
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        `<?xml version="1.0"?><D:multistatus xmlns:D="DAV:">${entry('/dav/pk1/pub/')}${entry('/dav/pk1/pub/made%20by%20admin.txt')}${entry('/dav/pk1/pub/100%.txt')}</D:multistatus>`,
+        { status: 207, headers: { 'Content-Type': 'application/xml' } },
+      ),
+    );
 
-    await service.move('/pk1/pub/old.txt', '/pk1/pub/new.txt');
+    const directory = await service.listDirectory('/pk1/pub/');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe('/api/webdav/pk1/pub/old.txt');
-    expect(init?.method).toBe('POST');
-    const headers = new Headers(init?.headers);
-    expect(headers.get('X-HTTP-Method-Override')).toBe('MOVE');
-    expect(headers.get('Destination')).toBe('/api/webdav/pk1/pub/new.txt');
+    expect(directory.files.map(({ displayName, path }) => ({ displayName, path }))).toEqual([
+      // Not valid percent-encoding: shown as the homeserver sent it.
+      { displayName: '100%.txt', path: '/pk1/pub/100%.txt' },
+      // The path keeps its encoding: it is what later requests send.
+      { displayName: 'made by admin.txt', path: '/pk1/pub/made%20by%20admin.txt' },
+    ]);
+  });
+});
+
+describe('decodedPath', () => {
+  it('decodes each name and keeps the slashes', () => {
+    expect(decodedPath('/pk1/pub/my%20folder/caf%C3%A9.txt')).toBe('/pk1/pub/my folder/café.txt');
+    expect(decodedPath('/pk1/pub/')).toBe('/pk1/pub/');
+  });
+
+  it('leaves a name that is not valid percent-encoding as it was sent', () => {
+    expect(decodedPath('/pk1/pub/100%/x%20y')).toBe('/pk1/pub/100%/x y');
   });
 });

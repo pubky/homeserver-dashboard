@@ -116,34 +116,12 @@ export function useWebDav() {
     [getService],
   );
 
-  const moveFile = useCallback(
-    async (sourcePath: string, destinationPath: string): Promise<boolean> => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const service = getService();
-        await service.move(sourcePath, destinationPath);
-        return true;
-      } catch (err) {
-        const webdavError: WebDavError =
-          err instanceof Error ? { message: err.message, status: 0 } : (err as WebDavError);
-        setError(webdavError);
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [getService],
-  );
-
   return {
     listDirectory,
     readFile,
     writeFile,
     deleteFile,
     createDirectory,
-    moveFile,
     isLoading,
     error,
   };
