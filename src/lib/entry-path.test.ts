@@ -5,7 +5,12 @@ const USER = 'o4dksfbqk85ogzdb5osziw6befigbuxmuxkuxq8434q89uj56uyy';
 const ENTRY = `${USER}/pub/dir/file.txt`;
 
 describe('parseEntryPath', () => {
-  it.each([[`${USER}/pub/a%23b%3F.txt`], [`${USER}/pub/..hidden/a..b.txt`]])('keeps %s as it is', (input) => {
+  it.each([
+    [`${USER}/pub/a%23b%3F.txt`],
+    [`${USER}/pub/..hidden/a..b.txt`],
+    [`${USER}/pub/a%2e.txt`],
+    [`${USER}/pub/%2e%2e%2e/x`],
+  ])('keeps %s as it is', (input) => {
     expect(parseEntryPath(input)).toBe(input);
   });
 
@@ -39,6 +44,14 @@ describe('parseEntryPath', () => {
     [`${USER}/pub/dir/../file.txt`],
     [`${USER}/pub/./file.txt`],
     [`${USER}/pub/dir/..`],
+    // The URL parser reads %2e as a dot, so these resolve like `..` and `.` too.
+    [`${USER}/pub/dir/%2e%2e/file.txt`],
+    [`${USER}/pub/%2E./file.txt`],
+    [`${USER}/pub/dir/.%2e`],
+    [`${USER}/pub/%2e/file.txt`],
+    [`${USER}/pub/%2e%2e/%2e%2e/${USER}/pub/file.txt`],
+    [`${USER}/pub/di\tr/file.txt`],
+    [`${USER}/pub/dir/fi\nle.txt`],
     [`${USER}/pub/dir\\file.txt`],
   ])('finds no entry path in %j', (input) => {
     expect(parseEntryPath(input)).toBeNull();

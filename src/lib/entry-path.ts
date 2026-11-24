@@ -5,11 +5,12 @@ const ENTRY_PATH = new RegExp(`^${Z32_PUBKEY_PATTERN}/pub/.+`);
 
 /**
  * What a browser rewrites when the path goes into a request URL: it cuts the
- * URL at `?` or `#`, resolves `.` and `..`, and reads `\` as `/`. A path with
- * any of these would not be the one sent, so it is no entry path; a name that
- * holds such a character has to be given percent-encoded.
+ * URL at `?` or `#`, resolves `.` and `..` (also written `%2e`), drops tabs
+ * and line breaks, and reads `\` as `/`. A path with any of these would not be
+ * the one sent, so it is no entry path; a name that holds `?`, `#` or `\` has
+ * to be given percent-encoded.
  */
-const REWRITTEN_IN_A_URL = /[?#\\]|(^|\/)\.\.?(\/|$)/;
+const REWRITTEN_IN_A_URL = /[?#\\\t\n\r]|(^|\/)(\.|%2e)(\.|%2e)?(\/|$)/i;
 
 /**
  * The entry path in what an admin typed or pasted: a bare entry path, a
