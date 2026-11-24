@@ -5,6 +5,10 @@ const USER = 'o4dksfbqk85ogzdb5osziw6befigbuxmuxkuxq8434q89uj56uyy';
 const ENTRY = `${USER}/pub/dir/file.txt`;
 
 describe('parseEntryPath', () => {
+  it.each([[`${USER}/pub/a%23b%3F.txt`], [`${USER}/pub/..hidden/a..b.txt`]])('keeps %s as it is', (input) => {
+    expect(parseEntryPath(input)).toBe(input);
+  });
+
   it.each([
     [ENTRY],
     [`  /${ENTRY}  `],
@@ -29,6 +33,13 @@ describe('parseEntryPath', () => {
     // `l` is not in the z-base-32 alphabet.
     [`${USER.replace('o', 'l')}/pub/file.txt`],
     [`https://example.com/${USER}`],
+    // A browser would send a different path than the one shown.
+    [`${USER}/pub/dir/#notes`],
+    [`${USER}/pub/file.txt?x`],
+    [`${USER}/pub/dir/../file.txt`],
+    [`${USER}/pub/./file.txt`],
+    [`${USER}/pub/dir/..`],
+    [`${USER}/pub/dir\\file.txt`],
   ])('finds no entry path in %j', (input) => {
     expect(parseEntryPath(input)).toBeNull();
   });

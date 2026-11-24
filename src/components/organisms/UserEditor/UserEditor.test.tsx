@@ -47,6 +47,15 @@ describe('UserEditor', () => {
     expect(storage.placeholder).toBe('1024');
   });
 
+  it('strips the pubky prefix only in front of a z-base-32 key', async () => {
+    // `l` is not in the alphabet, so this is not a prefixed key and is looked up as typed.
+    const notAKey = `pubky${ALICE.replace('w', 'l')}`;
+    render(<UserEditor onDisableUser={noop} onEnableUser={noop} />);
+    await lookUp(notAKey);
+    await screen.findByTestId('user-editor-error');
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`/api/admin/users/${notAKey}/quota`);
+  });
+
   it('saves only what changed and shows the field as custom', async () => {
     render(<UserEditor onDisableUser={noop} onEnableUser={noop} />);
     await lookUp(ALICE);

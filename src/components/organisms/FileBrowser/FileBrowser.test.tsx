@@ -4,13 +4,14 @@ import { FileBrowser } from './FileBrowser';
 import type { WebDavFile } from '@/services/webdav';
 
 const listDirectory = vi.fn();
+const readFile = vi.fn();
 const deleteFile = vi.fn();
 const deleteUrl = vi.fn();
 
 vi.mock('@/hooks/webdav', () => ({
   useWebDav: () => ({
     listDirectory,
-    readFile: vi.fn(),
+    readFile,
     writeFile: vi.fn(),
     deleteFile,
     createDirectory: vi.fn(),
@@ -83,6 +84,28 @@ describe('FileBrowser dialogs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New File' }));
     const d = await dialog();
     expect(d.getByText('Create a new file in /pk1/pub/my folder/')).toBeTruthy();
+  });
+
+  it('shows the folder name decoded in the New Folder dialog', async () => {
+    render(<FileBrowser initialPath="/pk1/pub/my%20folder/" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New Folder' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'New Folder' }));
+    const d = await dialog();
+    expect(d.getByText('Create a new directory in /pk1/pub/my folder/')).toBeTruthy();
+  });
+
+  it('shows an opened file under its decoded path, and reads it by the path the homeserver sent', async () => {
+    const file: WebDavFile = { ...files[0], displayName: 'my notes.txt', path: '/pk1/pub/my%20notes.txt' };
+    listDirectory.mockResolvedValue({ directory: { files: [file] } });
+    readFile.mockResolvedValue('hello');
+    renderBrowser();
+    await waitFor(() => expect(screen.getAllByLabelText('Open file my notes.txt').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByLabelText('Open file my notes.txt')[0]);
+    const d = await dialog();
+    expect(d.getByText('/pk1/pub/my notes.txt')).toBeTruthy();
+    expect(readFile).toHaveBeenCalledWith('/pk1/pub/my%20notes.txt');
   });
 
   it('New File dialog offers Cancel', async () => {

@@ -4,6 +4,14 @@ import { Z32_PUBKEY_PATTERN } from './pubky';
 const ENTRY_PATH = new RegExp(`^${Z32_PUBKEY_PATTERN}/pub/.+`);
 
 /**
+ * What a browser rewrites when the path goes into a request URL: it cuts the
+ * URL at `?` or `#`, resolves `.` and `..`, and reads `\` as `/`. A path with
+ * any of these would not be the one sent, so it is no entry path; a name that
+ * holds such a character has to be given percent-encoded.
+ */
+const REWRITTEN_IN_A_URL = /[?#\\]|(^|\/)\.\.?(\/|$)/;
+
+/**
  * The entry path in what an admin typed or pasted: a bare entry path, a
  * `/dav/...` or `/webdav/...` path, or a full URL to one. Null when it holds none.
  */
@@ -23,5 +31,5 @@ export function parseEntryPath(input: string): string | null {
   }
   value = value.replace(/^\/+/, '').replace(/^(web)?dav\/+/, '');
 
-  return ENTRY_PATH.test(value) ? value : null;
+  return ENTRY_PATH.test(value) && !REWRITTEN_IN_A_URL.test(value) ? value : null;
 }
