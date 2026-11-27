@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.34]
+
+### Security
+
+- Next.js is upgraded from 16.2.6 to 16.4.5. The React Server Components runtime bundled in Next.js before 16.4.1 allows unauthenticated remote code execution through a crafted Flight payload ([GHSA-xqc2-xf4c-x3h3](https://github.com/facebook/react/security/advisories/GHSA-xqc2-xf4c-x3h3), critical). 16.4.1 also fixes an unauthenticated RCE in the image optimizer when SVG files are used ([GHSA-2464-fhr4-w9xw](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw), critical) and a Server Actions denial of service ([GHSA-p3m5-59mp-jv5r](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r)). 16.4.5 is the current release and adds the November 3, 2026 fixes, among them an HttpOnly cookie exposure on Edge routes ([GHSA-f3mh-rxg3-f5g2](https://github.com/vercel/next.js/security/advisories/GHSA-f3mh-rxg3-f5g2)).
+
+### Added
+
+- The dashboard runs next to a plain homeserver, without Docker or Umbrel. Each release now has a `linux-amd64` archive attached to its GitHub release, with the built dashboard and a Node.js binary inside, so the machine needs neither Node.js nor npm. Its `homeserver-dashboard` launcher listens on `127.0.0.1:8080`; `DASHBOARD_HOST` and `DASHBOARD_PORT` change that. The README's "Run it next to a homeserver" section has the two steps. There is no arm64 archive yet.
+- The admin API's address and password are read from the homeserver's `config.toml` when `ADMIN_BASE_URL` or `ADMIN_TOKEN` is unset: `[admin] listen_socket` and `[admin] admin_password`, from the file `HOMESERVER_CONFIG_PATH` names. A homeserver that leaves them commented out is reached on its defaults, `127.0.0.1:6288` and the password `admin`, and the dashboard logs a warning that the default password is in use. A variable that is set always wins, so the Umbrel app, which sets both, behaves as before.
+- The Invites tab lists every invite code the homeserver has issued, most recent first, with Unused and Used filters. Unused codes can be copied; used ones show when they were used and by which pubky. The list appears only when the homeserver answers `GET /signup_tokens`, and reads at most 5000 codes, saying so when the list is cut short. On homeservers that report a code's limits (0.17+) each code has a "Limits" button; others, including the 0.16.1 the Umbrel app pins, show a note instead. The "Created this session" list is gone: a new code is shown once with its QR code and link, then lives in the list.
+- "Create invite" can set limits for that invite: storage, download and upload rates and bursts, and writable paths, sent to `POST /generate_signup_token` (an empty form still uses `GET`). Where the dashboard can read `config.toml`, each empty field shows the homeserver's default as its placeholder, and the homeserver's own error for a bad value is shown as is. `GET /api/server-config` also returns `defaultQuota`.
+- The Users tab works again, on routes the homeserver actually has. It used to depend on `GET /users/disabled`, which is in no homeserver release, so it was hidden everywhere. Look an account up by pubky to change its allowance (storage, rates, bursts, writable paths) through `GET|PATCH /users/{pubkey}/quota` and to disable or enable it; clearing a field hands it back to the homeserver's default. On homeserver 0.17+ the tab also lists every account with its signup date, storage used against its allowance and status, filtered by All, Enabled or Disabled and ordered by newest or most storage. On 0.16.1 the tab shows the editor alone, and an account's status reads "Not known" until it is disabled or enabled here. `/api/admin/[[...path]]` now passes `PATCH` through.
+
+### Removed
+
+- Rename is gone from the Files tab. It used WebDAV `MOVE` on the homeserver's admin `/dav` share, which corrupts the file it moves ([pubky-homeserver#656](https://github.com/pubky/pubky-homeserver/issues/656)). `/api/webdav` now answers `MOVE` and `COPY` with `400 Unsupported WebDAV method` and no longer forwards a `Destination` header. Files renamed with an earlier version stay broken; upload them again.
+
+### Fixed
+
+- Disabling or enabling a user no longer reports an error after the homeserver did it. The homeserver answers those calls with a plain-text `Ok`, which the dashboard tried to parse as JSON.
+- "Delete by path" in the Files tab only deletes a path the homeserver lists. It reads the listing again first, accepts only `<pubky>/pub/...` entries, and refuses a path with `?`, `#`, a backslash, or a `.` or `..` segment, encoded or not. File names are shown decoded.
+
 ## [0.1.33]
 
 ### Security
