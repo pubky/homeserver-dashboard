@@ -94,9 +94,12 @@ store's `docker-compose.yml`, and keep the dashboard working against it.
 
 ## Release
 
-1. Bump the version by hand in two places: `package.json` and a matching `## [x.y.z]` heading in
-   `CHANGELOG.md`.
-2. Push a `v*.*.*` tag. That triggers the Docker Hub publish (`synonymsoft/homeserver-dashboard`) and
-   `release.yml`, which attaches the release archive to the GitHub release, creating it if needed.
-3. Nothing reaches Umbrel users until `pubky/umbrel-app-store` pins the new image by digest and bumps
-   its own app version. That repo's README documents its versioning scheme.
+`RELEASING.md` has the steps. The parts that are easy to get wrong:
+
+- Feature PRs carry no version bump and no changelog entry. Both are written in the `chore: vX.Y.Z`
+  PR: `npm version <x.y.z> --no-git-tag-version` (it also updates `package-lock.json`) and a matching
+  `## [x.y.z]` section in `CHANGELOG.md`.
+- A `v*.*.*` tag triggers two independent workflows. `release.yml` refuses a tag that does not match
+  `package.json`; `docker.yml` has no such check and publishes the image anyway.
+- Nothing reaches Umbrel users until `pubky/umbrel-app-store` pins the new image by digest and bumps
+  its own app version. That repo's README documents its versioning scheme.
